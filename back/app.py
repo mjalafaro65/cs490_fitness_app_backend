@@ -20,6 +20,47 @@ db = SQLAlchemy(app)
 def health():
     return {"status": "ok"}
 
+### Adding a user
+@app.post("/add_user")
+def add_user():
+    data = request.get_json()
+
+    new_user = User
+    (
+        first_name=data.get("first_name"),
+        last_name=data.get("last_name"),
+        phone_number=data.get("phone_number"),
+    )
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+        return {"message": "User added successfully"}
+    except Exception as e:
+        db.session.rollback()
+        return {"error": "Failed to add user"}, 500
+
+### Deleting an account
+@app.delete("/delete_account/<int:user_id>")
+def delete_account(user_id):
+    data = request.get_json()
+    reason = data.get("reason")
+    detailed_reason = data.get("detailed_reason")
+    deletion_info = AccountDeletionInfo
+    (
+        reason=reason, 
+        detailed_reason=detailed_reason,
+    )
+    try:
+        db.session.add(deletion_info)
+        db.session.commit()
+        user = User.query.get(user_id)
+        if user:
+            db.session.delete(user)
+            db.session.commit()
+            return {"message": "Account deleted successfully"}
+        else:
+            return {"error": "User not found"}, 404
+
 ### Adding a meal plan
 ### If the plan does not exist, 404
 @app.get("/meal_plan_sub/<int:plan_id>")
@@ -133,4 +174,4 @@ def log_steps(steps):
 
 if __name__ == "__main__":
     app.run(debug=True)
-
+asdqwe
