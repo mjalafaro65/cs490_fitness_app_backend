@@ -4,14 +4,10 @@ from datetime import datetime
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 app = Flask(__name__)
 CORS(app)
-
-
-### Important notes
-### Switched to using SQLAlchemy
-
 load_dotenv()
 
 ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
@@ -28,6 +24,8 @@ class Config:
         }
     }
 
+login_manager = LoginManager()
+login_manager.init_app(app)
 app.config.from_object(Config)
 db = SQLAlchemy(app)
 @app.route('/')
@@ -36,9 +34,30 @@ def home():
 
 
 
-# @app.get("/health")
-# def health():
-#     return {"status": "ok"}
+@login_manager.user_loader
+def load_user(user_id):
+    return UserAuth.query.get(int(user_id))
+
+### User Login
+@app.post("/login")
+def login():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+
+    user = UserAuth.query.filter_by(email=email).first()
+    if user and user.password_hash == password:
+        login_user(user)
+        return {"message": "Login successful"}
+    else:
+        return {"error": "Invalid email or password"}, 401
+
+### User Logout
+@app.post("/logout")
+@login_required
+def logout():
+    logout_user()
+    return {"message": "Logout successful"}
 
 # ### Adding a meal plan
 # ### If the plan does not exist, 404
