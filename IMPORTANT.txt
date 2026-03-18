@@ -1,0 +1,5 @@
+pip install flask-login
+
+Needs to be added to requirements
+can't but will do on 
+3/17/26
