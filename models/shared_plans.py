@@ -6,7 +6,7 @@ class ShareTypeEnum(db.Enum):
     view = 'view'
     copy = 'copy'
 
-class SavedPlan(db.Model):
+class SharedPlans(db.Model):
     __tablename__ = 'saved_plans'
     
     saved_plan_id = db.Column(db.Integer, primary_key=True)

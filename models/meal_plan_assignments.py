@@ -14,7 +14,7 @@ class StatusEnum(db.Enum):
     completed = 'completed'
     cancelled = 'cancelled'
 
-class MealPlanAssignment(db.Model):
+class MealPlanAssignments(db.Model):
     __tablename__ = 'meal_plan_assignments'
     
     assignment_id = db.Column(db.Integer, primary_key=True)

@@ -9,7 +9,7 @@ class StatusEnum(db.Enum):
     rejected = 'rejected'
     closed = 'closed'
 
-class RefundDispute(db.Model):
+class RefundDisputes(db.Model):
     __tablename__ = 'refund_disputes'
     
     refund_dispute_id = db.Column(db.Integer, primary_key=True)

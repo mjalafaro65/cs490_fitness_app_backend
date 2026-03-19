@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class SavedCoach(db.Model):
+class SavedCoaches(db.Model):
     __tablename__ = 'saved_coaches'
     
     saved_coach_id = db.Column(db.Integer, primary_key=True)

@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class WorkoutLogEntry(db.Model):
+class WorkoutLogEntries(db.Model):
     __tablename__ = 'workout_log_entries'
 
     workout_log_entry_id = db.Column(db.Integer, primary_key=True)

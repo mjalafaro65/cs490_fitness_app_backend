@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class PayMentMethods(db.Model):
+class PaymentMethods(db.Model):
     __tablename__ = 'payment_methods'
     
     payment_method_id = db.Column(db.Integer, primary_key=True)

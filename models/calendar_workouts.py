@@ -3,7 +3,7 @@ from sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-class CalendarWorkout(db.Model):
+class CalendarWorkouts(db.Model):
     __tablename__ = "calendar_workouts"
     calendar_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, nullable=False)

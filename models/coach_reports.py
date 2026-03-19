@@ -2,13 +2,13 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class StatusEnum(enum.Enum):
+class StatusEnum(db.Enum):
     pending = "pending"
     reviewed = "reviewed"
     resolved = "resolved"
     dismissed = "dismissed"
 
-class CoachReport(db.Model):
+class CoachReports(db.Model):
     __tablename__ = 'coach_reports'
 
     report_id = db.Column(db.Integer, primary_key=True)

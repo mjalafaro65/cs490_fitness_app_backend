@@ -7,7 +7,7 @@ class status_enum(db.Enum):
     inactive = "inactive"
     terminated = "terminated"
 
-class CoachClientRelationship(db.Model):
+class CoachClientRelationships(db.Model):
     __tablename__ = "coach_client_relationships"
 
     relationshi_id = db.Column(db.Integer, primary_key=True)

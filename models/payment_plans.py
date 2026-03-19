@@ -6,7 +6,7 @@ class BillTypeEnum(db.Enum):
     one_time = 'one_time'
     recurring = 'recurring'
 
-class PaymentPlan(db.Model):
+class PaymentPlans(db.Model):
     __tablename__ = 'payment_plans'
     
     payment_plan_id = db.Column(db.Integer, primary_key=True)
