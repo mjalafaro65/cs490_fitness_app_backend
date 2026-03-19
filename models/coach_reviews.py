@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import CheckConstraint, SQLAlchemy
+from sqlalchemy import CheckConstraint
 from db import db
 
 class CoachReviews(db.Model):

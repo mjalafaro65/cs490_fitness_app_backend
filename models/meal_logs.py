@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import ForeignKey, SQLAlchemy
+from sqlalchemy import ForeignKey
 from db import db
 
 class MealLogs(db.Model):

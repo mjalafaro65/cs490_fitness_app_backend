@@ -1,6 +1,5 @@
 from datetime import datetime
-
-
+from sqlalchemy import func
 from db import db
 
 class Users(db.Model):

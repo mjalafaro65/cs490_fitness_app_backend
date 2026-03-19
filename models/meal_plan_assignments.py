@@ -1,15 +1,15 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class RepeatEnum(db.Enum):
+class RepeatEnum(enum.Enum):
     none = 'none'
     daily = 'daily'
     weekly = 'weekly'
     biweekly = 'biweekly'
     monthly = 'monthly'
 
-class StatusEnum(db.Enum):
+class StatusEnum(enum.Enum):
     active = 'active'
     completed = 'completed'
     cancelled = 'cancelled'
@@ -23,6 +23,6 @@ class MealPlanAssignments(db.Model):
     assigned_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=True)
-    repeat_rule = db.Column(RepeatEnum, default=RepeatEnum.none, nullable=False)
-    status = db.Column(StatusEnum, default=StatusEnum.active, nullable=False)
+    repeat_rule = db.Column(db.Enum(RepeatEnum), default=RepeatEnum.none, nullable=False)
+    status = db.Column(db.Enum(StatusEnum), default=StatusEnum.active, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

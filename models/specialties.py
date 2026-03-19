@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class CoachTypeEnum(db.Enum):
+class CoachTypeEnum(enum.Enum):
     workout = 'workout'
     nutrition = 'nutrition'
 

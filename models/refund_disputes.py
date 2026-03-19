@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class StatusEnum(db.Enum):
+class StatusEnum(enum.Enum):
     open = 'open'
     under_review = 'under_review'
     approved = 'approved'
@@ -16,7 +16,7 @@ class RefundDisputes(db.Model):
     payment_id = db.Column(db.Integer, db.ForeignKey('payments.payment_id'), nullable=False)
     opened_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     reason = db.Column(db.String(255), nullable=False)
-    status = db.Column(StatusEnum, nullable=False, default=StatusEnum.open)
+    status = db.Column(db.Enum(StatusEnum), nullable=False, default=StatusEnum.open)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     resolved_at = db.Column(db.DateTime, nullable=True)
     resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)

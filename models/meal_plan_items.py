@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class MealSlotEnum(db.Enum):
+class MealSlotEnum(enum.Enum):
     breakfast = 'breakfast'
     brunch = 'brunch'
     branch = 'branch'
@@ -19,7 +19,7 @@ class MealPlanItems(db.Model):
     meal_id = db.Column(db.Integer, db.ForeignKey('meals.meal_id'), nullable=False)
     ### Database says do it by int?
     day_index = db.Column(db.Integer, nullable=False)  
-    meal_slot = db.Column(MealSlotEnum, nullable=False)
+    meal_slot = db.Column(db.Enum(MealSlotEnum), nullable=False)
     servings = db.Column(db.Numeric(6, 2), nullable=False)
     notes = db.Column(db.Text)
     sort_order = db.Column(db.Integer, nullable=False)

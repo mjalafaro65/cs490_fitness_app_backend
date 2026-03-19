@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class StatusEnum(db.Enum):
+class StatusEnum(enum.Enum):
     pending = 'pending'
     completed = 'completed'
     failed = 'failed'
@@ -15,7 +15,7 @@ class Payments(db.Model):
     invoice_id = db.Column(db.Integer, db.ForeignKey('invoices.invoice_id'), nullable=False)
     payer_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     amount = db.Column(db.Numeric(10,2), nullable=False)
-    status = db.Column(StatusEnum, nullable=False)
+    status = db.Column(db.Enum(StatusEnum), nullable=False)
     is_auto_payment = db.Column(db.Boolean, default=False)
     provider = db.Column(db.String(60), nullable=True)
     provider_ref = db.Column(db.String(120), nullable=True)

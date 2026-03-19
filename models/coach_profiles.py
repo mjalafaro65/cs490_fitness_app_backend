@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class ApprovalStatusEnum(db.Enum):
+class ApprovalStatusEnum(enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
     DENIED = "denied"
@@ -16,7 +16,7 @@ class CoachProfiles(db.Model):
     years_experience = db.Column(db.Integer, nullable=False)
     bio = db.Column(db.Text, nullable=True)
     profile_picture_url = db.Column(db.String(500), nullable=True)
-    approval_status = db.Column(ApprovalStatusEnum, nullable=False, default=ApprovalStatusEnum.PENDING)
+    approval_status = db.Column(db.Enum(ApprovalStatusEnum), nullable=False, default=ApprovalStatusEnum.PENDING)
     approved_by = db.Column(db.Integer, db.ForeignKey('admin_users.admin_user_id'), nullable=True)
     approved_at = db.Column(db.DateTime, nullable=True)
     flagged_by = db.Column(db.Integer, db.ForeignKey('admin_users.admin_user_id'), nullable=True)

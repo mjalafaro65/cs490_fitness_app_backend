@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class ShareTypeEnum(db.Enum):
+class ShareTypeEnum(enum.Enum):
     view = 'view'
     copy = 'copy'
 

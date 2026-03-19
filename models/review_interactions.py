@@ -1,8 +1,8 @@
 from datetime import datetime
-
+import enum
 from db import db
 
-class InteractionType(db.Enum):
+class InteractionType(enum.Enum):
     helpful = 'helpful'
     unhelpful = 'unhelpful'
 
