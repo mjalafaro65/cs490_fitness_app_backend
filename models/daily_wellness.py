@@ -1,6 +1,4 @@
 from datetime import datetime, date
-from sqlalchemy import UniqueConstraint
-
 from db import db
 
 class DailyWellness(db.Model):
