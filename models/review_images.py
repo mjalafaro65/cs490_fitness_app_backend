@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
-db = SQLAlchemy()
+
+from db import db
 
 class ReviewImages(db.Model):
     __tablename__ = 'review_images'

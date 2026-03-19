@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import ForeignKey, SQLAlchemy
-db = SQLAlchemy()
+from db import db
 
 class MealLogs(db.Model):
     __tablename__ = 'meal_logs'

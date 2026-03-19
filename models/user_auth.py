@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
-db = SQLAlchemy()
+
+from db import db
 
 class UserAuth(db.Model, UserMixin):
     __tablename__ = 'user_auth'

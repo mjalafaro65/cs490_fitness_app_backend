@@ -1,7 +1,7 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
 
-db = SQLAlchemy()
+
+from db import db
 class gender_enum(db.Enum):
     MALE = "male"
     FEMALE = "female"
