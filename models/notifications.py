@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class NotificationID(db.Model):
+class Notifications(db.Model):
     __tablename__ = 'notifications'
     
     notif_id = db.Column(db.Integer, primary_key=True)

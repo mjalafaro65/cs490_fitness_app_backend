@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class ReviewFlag(db.Model):
+class ReviewFlags(db.Model):
     __tablename__ = 'review_flags'
     
     review_flag_id = db.Column(db.Integer, primary_key=True)

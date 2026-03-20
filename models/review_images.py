@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
-class ReviewImage(db.Model):
+class ReviewImages(db.Model):
     __tablename__ = 'review_images'
     
     review_image_id = db.Column(db.Integer, primary_key=True)

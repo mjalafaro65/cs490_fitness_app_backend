@@ -8,7 +8,7 @@ class gender_enum(db.Enum):
     OTHER = "other"
     Prefer_not_to_say = "prefer_not_to_say"
 
-class Client_Profile(db.Model):
+class ClientProfiles(db.Model):
     __tablename__ = "client_profiles"
     profile_id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, nullable=False)

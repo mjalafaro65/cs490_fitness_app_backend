@@ -8,7 +8,7 @@ class StatusEnum(db.Enum):
     failed = 'failed'
     refunded = 'refunded'
 
-class Payment(db.Model):
+class Payments(db.Model):
     __tablename__ = 'payments'
     
     payment_id = db.Column(db.Integer, primary_key=True)

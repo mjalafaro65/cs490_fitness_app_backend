@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
+from sqlalchemy import CheckConstraint, SQLAlchemy
 db = SQLAlchemy()
 
 class CoachReviews(db.Model):
@@ -8,12 +8,7 @@ class CoachReviews(db.Model):
     review_id = db.Column(db.Integer, primary_key=True)
     coach_profile_id = db.Column(db.Integer, db.ForeignKey('coach_profiles.coach_profile_id'), nullable=False)
     client_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    rating = db.Column
-    (
-        db.Integer, 
-        CheckConstraint('rating >= 1 AND rating <= 100'), 
-        nullable=False
-    )
+    rating = db.Column(db.Integer, CheckConstraint('rating >= 1 AND rating <= 100'), nullable=False)
     comment = db.Column(db.Text, nullable=True)
     is_anon = db.Column(db.Boolean, default=False, nullable=False)
     is_flagged = db.Column(db.Boolean, default=False, nullable=False)

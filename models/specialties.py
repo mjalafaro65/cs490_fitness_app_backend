@@ -6,7 +6,7 @@ class CoachTypeEnum(db.Enum):
     workout = 'workout'
     nutrition = 'nutrition'
 
-class Specialty(db.Model):
+class Specialties(db.Model):
     __tablename__ = 'specialties'
     
     specialty_id = db.Column(db.Integer, primary_key=True)

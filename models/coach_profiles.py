@@ -7,7 +7,7 @@ class ApprovalStatusEnum(db.Enum):
     APPROVED = "approved"
     DENIED = "denied"
 
-class CoachProfile(db.Model):
+class CoachProfiles(db.Model):
     __tablename__ = 'coach_profiles'
 
     coach_profile_id = db.Column(db.Integer, primary_key=True)
