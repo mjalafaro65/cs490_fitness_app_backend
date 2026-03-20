@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import CheckConstraint, SQLAlchemy
-db = SQLAlchemy()
+from sqlalchemy import CheckConstraint
+from db import db
 
 class CoachReviews(db.Model):
     __tablename__ = 'coach_reviews'

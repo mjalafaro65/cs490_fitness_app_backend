@@ -1,7 +1,7 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
 
-db = SQLAlchemy()
+
+from db import db
 
 class CalendarWorkouts(db.Model):
     __tablename__ = "calendar_workouts"

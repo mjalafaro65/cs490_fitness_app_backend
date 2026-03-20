@@ -1,7 +1,7 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
 
-db = SQLAlchemy()
+
+from db import db
 class ClientPaymentPlanOverrides(db.Model):
     __tablename__ = "client_payment_plan_overrides"
     override_id = db.Column(db.Integer, primary_key=True)

@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
-db = SQLAlchemy()
+
+from db import db
 
 class WorkoutPlanDays(db.Model):
     __tablename__ = 'plan_days'

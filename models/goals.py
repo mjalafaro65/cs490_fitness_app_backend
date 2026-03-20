@@ -1,15 +1,15 @@
 from datetime import datetime
-from sqlalchemy import SQLAlchemy
-db = SQLAlchemy()
+import enum
+from db import db
 
-class GoalType(db.Enum):
+class GoalType(enum.Enum):
     weight = "weight"
     strength = "strength"
     performance = "performance"
     nutrition = "nutrition"
     custom = "custom"
 
-class StatusEnum(db.Enum):
+class StatusEnum(enum.Enum):
     active = "active"
     completed = "completed"
     paused = "paused"
