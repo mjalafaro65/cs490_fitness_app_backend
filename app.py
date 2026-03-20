@@ -15,6 +15,7 @@ load_dotenv()
 ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
 
 class Config:
+    SECRET_KEY = os.getenv("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -25,21 +26,24 @@ class Config:
             "ssl_verify_cert": True
         }
     }
+    API_TITLE = "Fitness Project API"
+    API_VERSION = "v1"
+    OPENAPI_VERSION = "3.0.3"
+    OPENAPI_URL_PREFIX = "/"
+    OPENAPI_SWAGGER_UI_PATH = "/swagger-ui"
+    OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
 ## swagger configuration 
-app.config["API_TITLE"] = "Fitness Project API"
-app.config["API_VERSION"] = "v1"
-app.config["OPENAPI_VERSION"] = "3.0.3"
-app.config["OPENAPI_URL_PREFIX"] = "/"
-app.config["OPENAPI_SWAGGER_UI_PATH"] = "/swagger-ui"
-app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
-api = Api(app)
 
 # login_manager = LoginManager()
 # login_manager.init_app(app)
 app.config.from_object(Config)
+
+api = Api(app)
+
 db = SQLAlchemy(app)
+
 @app.route('/')
 def home():
     return {"message": "Backend is running!"}
