@@ -65,9 +65,6 @@ api.register_blueprint(client_blp)
 
 
 
-
-
-
 # login_manager = LoginManager()
 # login_manager.init_app(app)
 @app.route('/')
