@@ -3,10 +3,10 @@ from datetime import datetime
 from db import db
 
 class WorkoutPlanDayExercises(db.Model):
-    __tablename__ = 'plan_day_exercises'
+    __tablename__ = 'workout_plan_day_exercises'
 
     day_exercise_id = db.Column(db.Integer, primary_key=True)
-    day_id = db.Column(db.Integer, db.ForeignKey('plan_days.day_id'), nullable=False)
+    day_id = db.Column(db.Integer, db.ForeignKey('workout_plan_days.plan_day_id'), nullable=False)
     exercise_id = db.Column(db.Integer, db.ForeignKey('exercises.exercise_id'), nullable=False)
     sets = db.Column(db.Integer, nullable=False)
     reps = db.Column(db.Integer, nullable=False)

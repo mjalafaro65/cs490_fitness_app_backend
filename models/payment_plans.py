@@ -10,7 +10,7 @@ class PaymentPlans(db.Model):
     __tablename__ = 'payment_plans'
     
     payment_plan_id = db.Column(db.Integer, primary_key=True)
-    coach_id = db.Column(db.Integer, db.ForeignKey('coaches.coach_id'), nullable=False)
+    coach_profile_id = db.Column(db.Integer, db.ForeignKey('coach_profiles.coach_profile_id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     billing_type = db.Column(db.Enum(BillTypeEnum), nullable=False)
     amount = db.Column(db.Numeric(10,2), nullable=False)

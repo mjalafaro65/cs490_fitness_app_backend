@@ -3,7 +3,7 @@ from datetime import datetime
 from db import db
 
 class WorkoutPlans(db.Model):
-    __tablename__ = 'plans'
+    __tablename__ = 'workout_plans'
 
     plan_id = db.Column(db.Integer, primary_key=True)
     owner_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
