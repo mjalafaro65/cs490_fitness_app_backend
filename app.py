@@ -28,12 +28,6 @@ class Config:
             "ssl_verify_cert": True
         }
     }
-    API_TITLE = "Fitness Project API"
-    API_VERSION = "v1"
-    OPENAPI_VERSION = "3.0.3"
-    OPENAPI_URL_PREFIX = "/"
-    OPENAPI_SWAGGER_UI_PATH = "/swagger-ui"
-    OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
@@ -43,16 +37,15 @@ class Config:
     OPENAPI_SWAGGER_UI_PATH = "/swagger-ui"
     OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
+
 app = Flask(__name__)
-CORS(app)
 app.config.from_object(Config)
+
+CORS(app)
 
 db.init_app(app)
 
-#create tables to match mysql
-# with app.app_context():
-#     import models
-#     db.create_all()
+
 
 #init log in manager
 login_manager=LoginManager()
@@ -73,7 +66,6 @@ api.register_blueprint(client_blp)
 
 
 
-## swagger configuration 
 
 
 # login_manager = LoginManager()
@@ -81,7 +73,6 @@ api.register_blueprint(client_blp)
 @app.route('/')
 def home():
     return {"message": "Backend is running!"}
-
 
 
 # @login_manager.user_loader
