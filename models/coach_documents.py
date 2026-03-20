@@ -16,7 +16,7 @@ class CoachDocuments(db.Model):
     document_type = db.Column(db.String(100), nullable=False)
     document_url = db.Column(db.String(500), nullable=False)
     status = db.Column(db.Enum(StatusEnum), nullable=False)
-    reviewed_by = db.Column(db.Integer, db.ForeignKey('admin_users.admin_user_id'), nullable=True)
+    reviewed_by_admin_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
     notes = db.Column(db.Text, nullable=True)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

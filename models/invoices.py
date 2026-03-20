@@ -12,7 +12,7 @@ class Invoices(db.Model):
     __tablename__ = "invoices"
 
     invoice_id = db.Column(db.Integer, primary_key=True)
-    relationship_id = db.Column(db.Integer, db.ForeignKey("relationships.id"), nullable=False)
+    relationship_id = db.Column(db.Integer, db.ForeignKey("coach_client_relationships.relationship_id"), nullable=False)
     payment_method_id = db.Column(db.Integer, db.ForeignKey("payment_methods.payment_method_id"), nullable=False)
     status = db.Column(db.Enum(StatusEnum), nullable=False, default=StatusEnum.issued)
     currency = db.Column(db.String(3), nullable=False)

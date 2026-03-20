@@ -7,10 +7,10 @@ class ShareTypeEnum(enum.Enum):
     copy = 'copy'
 
 class SharedPlans(db.Model):
-    __tablename__ = 'saved_plans'
+    __tablename__ = 'shared_plans'
     
-    saved_plan_id = db.Column(db.Integer, primary_key=True)
-    plan_id = db.Column(db.Integer, db.ForeignKey('plans.plan_id'), nullable=False)
+    shared_plan_id = db.Column(db.Integer, primary_key=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey('workout_plans.plan_id'), nullable=False)
     shared_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     shared_with_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     share_type = db.Column(db.Enum(ShareTypeEnum))

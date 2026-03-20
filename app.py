@@ -1,21 +1,23 @@
 from flask import Flask, render_template, request
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_cors import CORS
+from db import db
 import os
 from dotenv import load_dotenv
 from flask_smorest import Api
 from features.client import client_blp
+from flask_login import LoginManager
+from models.users import Users
 
 # from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
-app = Flask(__name__)
-CORS(app)
 load_dotenv()
 
 ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
 
+##Set up config class 
 class Config:
+    SECRET_KEY=os.getenv("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -27,28 +29,54 @@ class Config:
         }
     }
 
-## swagger configuration 
-app.config["API_TITLE"] = "Fitness Project API"
-app.config["API_VERSION"] = "v1"
-app.config["OPENAPI_VERSION"] = "3.0.3"
-app.config["OPENAPI_URL_PREFIX"] = "/"
-app.config["OPENAPI_SWAGGER_UI_PATH"] = "/swagger-ui"
-app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
+    ## swagger configuration 
+    API_TITLE = "Fitness Project API"
+    API_VERSION= "v1"
+    OPENAPI_VERSION= "3.0.3"
+    OPENAPI_URL_PREFIX = "/"
+    OPENAPI_SWAGGER_UI_PATH = "/swagger-ui"
+    OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
+
+app = Flask(__name__)
+app.config.from_object(Config)
+
+CORS(app)
+
+db.init_app(app)
+
+
+
+#init log in manager
+login_manager=LoginManager()
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return Users.query.get(int(user_id))
+
+
+#int api
 api = Api(app)
 
 #register blueprints
 api.register_blueprint(client_blp)
 
 
+#register blueprints
+api.register_blueprint(client_blp)
+
+
+
+
+
+
 # login_manager = LoginManager()
 # login_manager.init_app(app)
-app.config.from_object(Config)
-db = SQLAlchemy(app)
 @app.route('/')
 def home():
     return {"message": "Backend is running!"}
-
 
 
 # @login_manager.user_loader

@@ -3,8 +3,8 @@ from flask_login import UserMixin
 
 from db import db
 
-class UserAuth(db.Model, UserMixin):
-    __tablename__ = 'user_auth'
+class UserAuths(db.Model, UserMixin):
+    __tablename__ = 'user_auths'
     
     auth_id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True, nullable=False)
