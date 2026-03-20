@@ -1,8 +1,8 @@
 from datetime import datetime, date
 from db import db
 
-class DailyWellness(db.Model):
-    __tablename__ = 'daily_wellness'
+class DailySurvey(db.Model):
+    __tablename__ = 'daily_survey'
 
     wellness_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)

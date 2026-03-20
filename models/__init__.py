@@ -48,7 +48,7 @@ from .review_images import ReviewImages
 from .review_flags import ReviewFlags
 from .review_interactions import ReviewInteractions
 from .goals import Goals
-from .daily_wellness import DailyWellness
+from .daily_survey import DailySurvey
 from .coach_progress_photos import CoachProgressPhotos
 from .coach_reports import CoachReports
 from .saved_coaches import SavedCoaches
