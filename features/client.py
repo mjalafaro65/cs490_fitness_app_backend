@@ -4,12 +4,12 @@ from models.daily_survey import DailySurvey
 from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema
-from flask_login import login_required, current_user
+# from flask_login import login_required, current_user
 from sqlalchemy import select
 
 
 #for connecting to app
-client_blp=Blueprint("Client", __name__, url_prefix="/client", description="Client Operations")
+client_blp=Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
 @client_blp.route("/daily-survey")
 class DailySurveyView(MethodView):
@@ -23,7 +23,7 @@ class DailySurveyView(MethodView):
         today=date.today()
 
         # changed to current_user.user_id when login feature is updated
-        test_user_id=2
+        test_user_id=3
         #make stmt
         #current_user is logged in uses from login_required
         stmt=select(DailySurvey).filter_by(user_id=test_user_id, date=today)

@@ -47,22 +47,10 @@ db.init_app(app)
 
 
 
-#init log in manager
-login_manager=LoginManager()
-login_manager.init_app(app)
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return Users.query.get(int(user_id))
 
 
 #int api
 api = Api(app)
-
-#register blueprints
-api.register_blueprint(client_blp)
-
 
 #register blueprints
 api.register_blueprint(client_blp)
