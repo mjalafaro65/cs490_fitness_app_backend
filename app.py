@@ -4,7 +4,8 @@ from datetime import datetime
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
-from flask_smorest import Api, Blueprint
+from flask_smorest import Api
+from features.client import client_blp
 
 # from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
@@ -35,6 +36,10 @@ app.config["OPENAPI_SWAGGER_UI_PATH"] = "/swagger-ui"
 app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
 api = Api(app)
+
+#register blueprints
+api.register_blueprint(client_blp)
+
 
 # login_manager = LoginManager()
 # login_manager.init_app(app)
