@@ -12,9 +12,8 @@ class status_enum(enum.Enum):
 class CoachClientRelationships(db.Model):
     __tablename__ = "coach_client_relationships"
 
-    relationshi_id = db.Column(db.Integer, primary_key=True)
-    coach_profile_id = db.Column(db.Integer,
-     db.ForeignKey("coach_profiles.coach_profile_id"), nullable=False)
+    relationship_id = db.Column(db.Integer, primary_key=True)
+    coach_profile_id = db.Column(db.Integer, db.ForeignKey("coach_profiles.coach_profile_id"), nullable=False)
     client_user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     payment_plan_id = db.Column(db.Integer, db.ForeignKey("payment_plans.payment_plan_id"), nullable=False)
     status = db.Column(db.Enum(status_enum), default=status_enum.active)

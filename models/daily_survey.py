@@ -1,10 +1,11 @@
 from datetime import datetime, date
 from db import db
 
-class DailyWellness(db.Model):
-    __tablename__ = 'daily_wellness'
+#will be used for both initial survey and wellness survey
+class DailySurvey(db.Model):
+    __tablename__ = 'daily_survey'
 
-    wellness_id = db.Column(db.Integer, primary_key=True)
+    survey_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     date = db.Column(db.Date, default=date.today, nullable=False)
 
@@ -15,7 +16,7 @@ class DailyWellness(db.Model):
 
     water_oz = db.Column(db.Numeric(4, 2), default=0.0, nullable=True)
     mood_score = db.Column(db.Integer, nullable=True)
-    weight = db.Column(db.Numeric(5, 2), nullable=True)
+    weight_lbs = db.Column(db.Numeric(5, 2), nullable=True)
     sleep_hours = db.Column(db.Numeric(4, 2),nullable=True)
 
 
