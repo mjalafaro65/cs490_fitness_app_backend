@@ -1,6 +1,6 @@
 # Account & Auth
 from .account_deletion_info import AccountDeletionInfo
-from .user_auth import UserAuth
+from .user_auths import UserAuths
 from .user_roles import UserRoles
 from .roles import Roles
 from .users import Users

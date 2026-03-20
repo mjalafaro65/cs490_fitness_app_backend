@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 ###example ->missing files
 # #for connecting to app
-# client_blp=Blueprint("Client", __name__, url_prefix="/client", description="Client Operations")
+client_blp=Blueprint("Client", __name__, url_prefix="/client", description="Client Operations")
 
 # @client_blp.route("/daily-survey")
 # class DailySurveyView(MethodView):
