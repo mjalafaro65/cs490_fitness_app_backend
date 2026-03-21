@@ -48,7 +48,7 @@ class UserLogin(MethodView):
         
         user = UserAuths.query.filter_by(email=data.get("email")).first()
         
-        # Check if user exists and password matches (Plain text for now per your code)
+        # Check if user exists and password matches
         if user and user.password == data.get("password"):
             # Create JWT Token
             token = create_access_token(identity=str(user.auth_id))
@@ -60,11 +60,33 @@ class UserLogin(MethodView):
 class UserMe(MethodView):
     @jwt_required()
     def get(self):
+        """
+        Deletes the logged-in user's account based on JWT identity
+
+        """
         current_user_id = get_jwt_identity()
         return {
+             #this is auth_id
             "logged_in_as": current_user_id,
             "message": "Token is valid and middleware is active"
         }, 200
+    @jwt_required()
+    def delete(self):
+        """
+        Deletes the logged-in user's account based on JWT identity
+        """
+        current_auth_id=get_jwt_identity()
+
+        user_auth=UserAuths.query.get_or_404(current_auth_id)
+
+        try:
+            db.session.delete(user_auth)
+            db.session.commit()
+            return {"message": "Account successfully deleted"}, 200
+        except:
+            db.session.rollback()
+            abort(500, message="Could not delete account")
+
 
 @auth_blp.route("/promote/<int:auth_id>")
 class AdminPromote(MethodView):
@@ -90,6 +112,8 @@ class AdminPromote(MethodView):
         except Exception:
             db.session.rollback()
             abort(400, message="Promotion failed.")
+
+
 
 # def register_user(data):
 #     data = request.get_json()
