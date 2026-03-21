@@ -1,15 +1,19 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from datetime import datetime
 from flask_cors import CORS
 from db import db
 import os
 from dotenv import load_dotenv
-from flask_smorest import Api
-from features.client import client_blp
-from flask_login import LoginManager
-from models.users import Users
+from flask_smorest import Api, Blueprint
+from flask_jwt_extended import JWTManager, get_jwt_identity, jwt_required
+from db import db  # This replaces your 'db = SQLAlchemy(app)' line later
+from middleware import roles_required
+from schemas.auth_schema import RegisterSchema
+from features.auth import auth_blp
+# ,register_user, login_user, promote_to_coach
 
-# from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from features.client import client_blp
+
 
 load_dotenv()
 
@@ -17,7 +21,6 @@ ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
 
 ##Set up config class 
 class Config:
-    SECRET_KEY=os.getenv("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -37,6 +40,18 @@ class Config:
     OPENAPI_SWAGGER_UI_PATH = "/swagger-ui"
     OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
+    API_SPEC_OPTIONS = {
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "JWT"
+                }
+            }
+        },
+        "security": [{"bearerAuth": []}]
+    }
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -46,31 +61,53 @@ CORS(app)
 db.init_app(app)
 
 
-
-#init log in manager
-login_manager=LoginManager()
-login_manager.init_app(app)
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return Users.query.get(int(user_id))
-
-
 #int api
 api = Api(app)
 
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
+jwt = JWTManager(app)
+
+
 #register blueprints
+api.register_blueprint(auth_blp)
 api.register_blueprint(client_blp)
 
-
-
-# login_manager = LoginManager()
-# login_manager.init_app(app)
 @app.route('/')
 def home():
     return {"message": "Backend is running!"}
 
+# # AUTHENTICATION
+# @app.route('/register', methods=['POST'])
+# def signup():
+#     schema = RegisterSchema()
+#     errors = schema.validate(request.json)
+#     if errors:
+#         return jsonify(errors), 400
+#     result, status = register_user(request.json)
+#     return jsonify(result), status
+
+# @app.route('/me', methods=['GET'])
+# @jwt_required()
+# def get_profile():
+#     current_user_id = get_jwt_identity()
+#     return jsonify({
+#         "logged_in_as": current_user_id,
+#         "message": "Token is valid and middleware is active"
+#     }), 200
+
+# @app.route('/login', methods=['POST'])
+# def signin():
+#     result, status = login_user(request.json)
+#     return jsonify(result), status
+
+# # ROLE BASED ACCESS CONTROL
+# @app.route('/admin/promote/<int:auth_id>', methods=['POST'])
+# @roles_required('admin')
+# def admin_promote(auth_id):
+#     result, status = promote_to_coach(auth_id)
+#     return jsonify(result), status
+
+# Client
 
 # @login_manager.user_loader
 # def load_user(user_id):
@@ -189,4 +226,9 @@ def home():
 #     return {"message": "Successfully logged steps"}
 
 if __name__ == "__main__":
+    '''
+    with app.app_context():
+        # sync model to database before app start
+         db.create_all() 
+    '''
     app.run(debug=True)
