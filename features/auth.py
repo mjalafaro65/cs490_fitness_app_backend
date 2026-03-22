@@ -2,9 +2,8 @@ from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from db import db
-from models.user_auths import UserAuths
-from models.user_roles import UserRoles
-from models.roles import Roles
+from models import UserAuths, UserRoles, Roles
+from models import Notifications, NotificationTypes
 from middleware import roles_required 
 from schemas.auth_schema import RegisterSchema
 
@@ -103,15 +102,30 @@ class AdminPromote(MethodView):
         if existing_role:
             return {"message": "User is already a coach"}, 200
 
+
         new_assignment = UserRoles(user_id=auth_id, role_id=coach_role.role_id)
         
         try:
             db.session.add(new_assignment)
+
+            notif_type = NotificationTypes.query.filter_by(slug='admin-approval').first()
+            if notif_type:
+                new_notif = Notifications(
+                    user_id=auth_id,
+                    notification_type_id=notif_type.notification_type_id,
+                    title="Promotion Approved!",
+                    body="Congratulations! An admin has promoted you to the Coach role.",
+                    is_read=False
+                )
+                db.session.add(new_notif)
+
             db.session.commit()
-            return {"message": f"User {auth_id} is now a coach"}, 200
+            return {"message": f"User {auth_id} is now a coach and has been notified"}, 200
         except Exception:
             db.session.rollback()
             abort(400, message="Promotion failed.")
+        
+
 
 
 
