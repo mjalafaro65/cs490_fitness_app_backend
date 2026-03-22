@@ -1,11 +1,13 @@
+from flask import abort
 from flask.views import MethodView
 from flask_smorest import Blueprint
-from models.daily_survey import DailySurvey
 from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import select
+
+from models.daily_survey import DailySurvey
 
 
 #for connecting to app
@@ -45,6 +47,3 @@ class DailySurveyView(MethodView):
 
         db.session.commit()
         return entry
-
-
-        
