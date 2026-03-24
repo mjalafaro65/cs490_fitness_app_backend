@@ -4,7 +4,9 @@ from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, C
 from db import db
 from datetime import date
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from middleware import roles_required 
 from sqlalchemy import func, select, desc
+from schemas.coach_schema import CoachProfileSchema, CoachProfilePostSchema
 
 coach_blp=Blueprint("Coach", __name__, url_prefix="/coach", description="Coach feat")
 
@@ -12,7 +14,7 @@ coach_blp=Blueprint("Coach", __name__, url_prefix="/coach", description="Coach f
 class TopCoach(MethodView):
     def get(self):
         """
-        Get top coaches and reviews (need photos)
+        Get top 3 coaches and reviews (need photos)
         """
         rating_stmt = (
             select(
@@ -72,5 +74,72 @@ class TopCoach(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, message=f"Failed to fetch coaches: {str(e)}")
+
+@coach_blp.route("/coach-profile")
+class CoachProfileView(MethodView):
+    @coach_blp.arguments(CoachProfilePostSchema, location="query")
+    @coach_blp.response(200, CoachProfileSchema)
+    def get(self,arg):
+        """
+        Get coach profile.
+        Coach: Calls /coach-profile (gets their own).
+        Admin: Calls /coach-profile?user_id=10 (gets specific user).
+        """
+        curr_id = get_jwt_identity()
+        target_user_id = arg.get("user_id")
+
+        #if target id is provided check if its the logged in user
+        #######need to check if its admin doing the call
+        
+        if target_user_id and target_user_id != curr_id:
+            UserRoles.query.get_or_404()
+            profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
+        else:
+        #fetch profile for logged in person
+            profile = CoachProfiles.query.filter_by(user_id=curr_id).first()
+
+        if not profile:
+            abort(404, message="Coach profile not found.")
+        return profile
+    
+    @jwt_required()
+    @coach_blp.arguments(CoachProfileSchema)
+    @coach_blp.response(201, CoachProfileSchema)
+    def post(self,data):
+        """
+        Initial Application: Client creates a coach profile with status 'pending'.
+        """
+        user_id = get_jwt_identity()
+
+        if CoachProfiles.query.filter_by(user_id=user_id).first():
+
+            abort(400, message="A profile already exists for this user.")
+
+        profile = CoachProfiles(**data, user_id=user_id)
+        db.session.add(profile)
+
+        # Optional: Notify admin ????
+
+        db.session.commit()
+        return profile
+    
+    @jwt_required()
+    @coach_blp.arguments(CoachProfileSchema(partial=True))
+    @coach_blp.response(200, CoachProfileSchema)
+    def patch(self,updated_data):
+        """
+        Update existing profile. partial=True allows updating just one field.
+        """
+        user_id = get_jwt_identity()
+        
+        target_user_id = update_data.pop("query_user_id", None) or current_user_id
+
+    
+
+
+
+
+
+
 
 

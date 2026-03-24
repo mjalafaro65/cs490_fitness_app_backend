@@ -1,10 +1,9 @@
-from http.client import HTTPException
 
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from db import db
-from models import UserAuths, UserRoles, Roles
+from models import UserAuths, UserRoles, Roles, Users, ClientProfiles
 from models import Notifications, NotificationTypes
 from middleware import roles_required 
 from schemas.auth_schema import RegisterSchema, UserSetupSchema
