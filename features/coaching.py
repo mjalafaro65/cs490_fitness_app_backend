@@ -1,8 +1,8 @@
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles
 from db import db
-from datetime import date
+from datetime import date, datetime
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from middleware import roles_required 
 from sqlalchemy import func, select, desc
@@ -90,12 +90,19 @@ class CoachProfileView(MethodView):
 
         #if target id is provided check if its the logged in user
         #######need to check if its admin doing the call
-        
-        if target_user_id and target_user_id != curr_id:
-            UserRoles.query.get_or_404()
+        if target_user_id and int(target_user_id) != int(curr_id):
+            # Check if curr_id has the 'admin' role
+            is_admin = db.session.query(UserRoles).join(Roles).filter(
+                UserRoles.user_id == curr_id,
+                Roles.name == 'admin'
+            ).first()
+
+            if not is_admin:
+                abort(403, message="Admin access required to view other profiles.")
+            
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
+        
         else:
-        #fetch profile for logged in person
             profile = CoachProfiles.query.filter_by(user_id=curr_id).first()
 
         if not profile:
@@ -130,12 +137,64 @@ class CoachProfileView(MethodView):
         """
         Update existing profile. partial=True allows updating just one field.
         """
-        user_id = get_jwt_identity()
+        curr_id = get_jwt_identity()
+        target_user_id = updated_data.pop("user_id", None) or curr_id
+
+        #look at role
+        is_admin = db.session.query(UserRoles).join(Roles).filter(
+                UserRoles.user_id == curr_id,
+                Roles.name == 'admin'
+        ).first()
+
+        #if its not user or admin 
+        if int(target_user_id) != int(curr_id) and not is_admin:
+            abort(403, message="Unauthorized to edit this profile.")
+
+        profile = CoachProfiles.query.filter_by(user_id=target_user_id).first_or_404()    
+
+        #field coach cant change 
+        restricted_fields = [
+            "is_flagged",
+            "flagged_at",
+            "approved_at",
+            "flagged_by_admin_user_id",
+            "approved_by_admin_user_id",
+            "created_at",
+            "updated_at"
+        ]
         
-        target_user_id = update_data.pop("query_user_id", None) or current_user_id
 
-    
+        for key, value in updated_data.items():
+            # if  coach tries to change a restricted field, just ignore it
+            if key == "status":
+                if is_admin:
+                    setattr(profile, key, value)
+                    if value == "approved":
+                        profile.approved_at = datetime.utcnow()
+                        profile.approved_by_admin_user_id = curr_id
+                elif value == "hidden":
+                    setattr(profile, key, value)
+                else:
+                    continue
 
+
+            #handle other admin-Only fields
+            elif key in restricted_fields:
+                if is_admin:
+                    setattr(profile, key, value)
+                else:
+                    abort(403, "Admin only")
+            #handle general fields (bio, experience, photo, specialty)
+            else:
+                setattr(profile, key, value)
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            abort(500, message="Database error occurred.")
+
+        return profile
 
 
 

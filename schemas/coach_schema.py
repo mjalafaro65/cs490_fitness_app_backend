@@ -10,9 +10,8 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
         sqla_session = db.session
+    coach_profile_id = fields.Int(dump_only=True)
         
-    exclude = ("approved_at", "approved_by_admin_user_id", "is_flagged")
-
 class CoachProfilePostSchema(Schema):
     user_id = fields.Int(load_only=True)
 

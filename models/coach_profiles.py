@@ -7,6 +7,7 @@ class ApprovalStatusEnum(enum.Enum):
     APPROVED = "approved"
     DENIED = "denied"
     HIDDEN = "hidden"
+    SWITCHED= "switched"
 
 class CoachProfiles(db.Model):
     __tablename__ = 'coach_profiles'
