@@ -1,12 +1,13 @@
+from http.client import HTTPException
+
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from db import db
-from models.user_auths import UserAuths
-from models.user_roles import UserRoles
+from models import UserAuths, UserRoles, Users, ClientProfiles
 from models.roles import Roles
 from middleware import roles_required 
-from schemas.auth_schema import RegisterSchema
+from schemas.auth_schema import RegisterSchema, UserSetupSchema
 
 # Create the Blueprint
 auth_blp = Blueprint("Authentication", __name__, url_prefix="/auth", description="Operations for User Auth")
@@ -35,12 +36,58 @@ class UserRegister(MethodView):
                 db.session.add(role_link)
                 db.session.commit()
 
-            return {"message": "User registered successfully", "user_id": new_user.auth_id}
+            access_token = create_access_token(identity=str(new_user.auth_id))
+            return {"message": "User registered successfully", "user_id": new_user.auth_id, "token": access_token}
             
         except Exception as e:
             db.session.rollback()
             abort(500, message=f"Registration failed: {str(e)}")
 
+@auth_blp.route("/setup")
+class UserSetup(MethodView):
+    @jwt_required()
+    @auth_blp.arguments(UserSetupSchema())
+    def post(self, data):
+        current_auth_id=get_jwt_identity()
+
+        #not client 
+        auth_rol_re=UserRoles.query.filter_by(user_id=current_auth_id, role_id=1).first()
+
+        if not auth_rol_re:
+            abort(403, message="Only for clients accounts")
+        
+        
+        #handle users table
+        existing_user=Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if  existing_user: 
+            abort(400,message="Client profile exists")
+            
+        user_info = {
+            "first_name": data.pop("first_name"),
+            "last_name": data.pop("last_name"),
+            "phone_number": data.pop("phone_number", None)
+        }
+
+        try:
+            #create user table, dont commit
+            user=Users(auth_id=current_auth_id,**user_info)
+            db.session.add(user)
+            db.session.flush()
+                
+
+            client_pf=ClientProfiles(client_id=user.user_id, **data)
+
+            db.session.add(client_pf)
+        
+            db.session.commit()
+            return {"message": "Setup successful", "auth_id": user.user_id}, 201 
+    
+        except Exception as e:
+            db.session.rollback()
+            abort(500, message= f"Error occur during set up: {str(e)}") 
+
+        
 @auth_blp.route("/login")
 class UserLogin(MethodView):
     @auth_blp.arguments(RegisterSchema)
@@ -108,7 +155,7 @@ class AdminPromote(MethodView):
         try:
             db.session.add(new_assignment)
             db.session.commit()
-            return {"message": f"User {auth_id} is now a coach"}, 200
+            return {"message": f"User with auth_id {auth_id} is now a coach"}, 200
         except Exception:
             db.session.rollback()
             abort(400, message="Promotion failed.")
