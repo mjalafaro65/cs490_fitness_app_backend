@@ -17,7 +17,6 @@ class ClientProfiles(db.Model):
     profile_photo = db.Column(db.String(255), nullable=True)
     bio = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow,
-    onupdate=datetime.utcnow)
-    height = db.Column(db.Integer, nullable=True)
-    weight = db.Column(db.Integer, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow,onupdate=datetime.utcnow)
+    height = db.Column(db.Numeric(5,2), nullable=True)
+    weight = db.Column(db.Numeric(5,2), nullable=True)
