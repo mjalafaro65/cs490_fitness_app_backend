@@ -14,6 +14,8 @@ from features.auth import auth_blp
 
 from features.client import client_blp
 from features.coaching import coach_blp
+from features.admin import admin_blp
+
 
 load_dotenv()
 
@@ -72,6 +74,7 @@ jwt = JWTManager(app)
 api.register_blueprint(auth_blp)
 api.register_blueprint(client_blp)
 api.register_blueprint(coach_blp)
+api.register_blueprint(admin_blp)
 
 @app.route('/')
 def home():

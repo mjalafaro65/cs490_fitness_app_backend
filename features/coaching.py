@@ -1,3 +1,4 @@
+from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles
@@ -5,8 +6,9 @@ from db import db
 from datetime import date, datetime
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from middleware import roles_required 
+from models.coach_profiles import ApprovalStatusEnum
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfilePostSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema
 
 coach_blp=Blueprint("Coach", __name__, url_prefix="/coach", description="Coach feat")
 
@@ -77,23 +79,29 @@ class TopCoach(MethodView):
 
 @coach_blp.route("/coach-profile")
 class CoachProfileView(MethodView):
-    @coach_blp.arguments(CoachProfilePostSchema, location="query")
+    @jwt_required()
+    @coach_blp.arguments(CoachProfileQuerySchema, location="query")
     @coach_blp.response(200, CoachProfileSchema)
-    def get(self,arg):
+    def get(self,args):
         """
         Get coach profile.
         Coach: Calls /coach-profile (gets their own).
         Admin: Calls /coach-profile?user_id=10 (gets specific user).
         """
-        curr_id = get_jwt_identity()
-        target_user_id = arg.get("user_id")
+        curr_auth_id = get_jwt_identity()
+        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
+
+        if not curr_user_id:
+            abort(401, message="User not found.")
+
+        target_user_id = args.get("user_id") or None
 
         #if target id is provided check if its the logged in user
         #######need to check if its admin doing the call
-        if target_user_id and int(target_user_id) != int(curr_id):
+        if target_user_id and target_user_id != curr_user_id:
             # Check if curr_id has the 'admin' role
             is_admin = db.session.query(UserRoles).join(Roles).filter(
-                UserRoles.user_id == curr_id,
+                UserRoles.user_id == curr_auth_id,
                 Roles.name == 'admin'
             ).first()
 
@@ -103,26 +111,27 @@ class CoachProfileView(MethodView):
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
         
         else:
-            profile = CoachProfiles.query.filter_by(user_id=curr_id).first()
+            profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
 
         if not profile:
             abort(404, message="Coach profile not found.")
         return profile
     
     @jwt_required()
-    @coach_blp.arguments(CoachProfileSchema)
+    @coach_blp.arguments(CoachProfileSchema(load_instance=False))
     @coach_blp.response(201, CoachProfileSchema)
     def post(self,data):
         """
         Initial Application: Client creates a coach profile with status 'pending'.
         """
-        user_id = get_jwt_identity()
+        curr_auth_id = get_jwt_identity()
+        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
 
-        if CoachProfiles.query.filter_by(user_id=user_id).first():
+        if CoachProfiles.query.filter_by(user_id=curr_user_id).first():
 
             abort(400, message="A profile already exists for this user.")
 
-        profile = CoachProfiles(**data, user_id=user_id)
+        profile = CoachProfiles(**data, user_id=curr_user_id)
         db.session.add(profile)
 
         # Optional: Notify admin ????
@@ -131,23 +140,25 @@ class CoachProfileView(MethodView):
         return profile
     
     @jwt_required()
-    @coach_blp.arguments(CoachProfileSchema(partial=True))
+    @coach_blp.arguments(CoachProfileSchema(partial=True,load_instance=False))
     @coach_blp.response(200, CoachProfileSchema)
     def patch(self,updated_data):
         """
         Update existing profile. partial=True allows updating just one field.
         """
-        curr_id = get_jwt_identity()
-        target_user_id = updated_data.pop("user_id", None) or curr_id
+        curr_auth_id = get_jwt_identity()
+        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
+
+        target_user_id = updated_data.pop("user_id", None) or curr_user_id
 
         #look at role
         is_admin = db.session.query(UserRoles).join(Roles).filter(
-                UserRoles.user_id == curr_id,
+                UserRoles.user_id == curr_auth_id,
                 Roles.name == 'admin'
         ).first()
 
         #if its not user or admin 
-        if int(target_user_id) != int(curr_id) and not is_admin:
+        if int(target_user_id) != int(curr_user_id) and not is_admin:
             abort(403, message="Unauthorized to edit this profile.")
 
         profile = CoachProfiles.query.filter_by(user_id=target_user_id).first_or_404()    
@@ -166,13 +177,15 @@ class CoachProfileView(MethodView):
 
         for key, value in updated_data.items():
             # if  coach tries to change a restricted field, just ignore it
+            
             if key == "status":
+                val_upper = value.upper() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if value == "approved":
+                    if val_upper == ApprovalStatusEnum.approved:
                         profile.approved_at = datetime.utcnow()
-                        profile.approved_by_admin_user_id = curr_id
-                elif value == "hidden":
+                        profile.approved_by_admin_user_id = curr_user_id
+                elif val_upper == ApprovalStatusEnum.switched:
                     setattr(profile, key, value)
                 else:
                     continue
@@ -183,7 +196,7 @@ class CoachProfileView(MethodView):
                 if is_admin:
                     setattr(profile, key, value)
                 else:
-                    abort(403, "Admin only")
+                    continue
             #handle general fields (bio, experience, photo, specialty)
             else:
                 setattr(profile, key, value)
@@ -195,8 +208,6 @@ class CoachProfileView(MethodView):
             abort(500, message="Database error occurred.")
 
         return profile
-
-
 
 
 
