@@ -4,7 +4,7 @@ from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from db import db
-from models import UserAuths, UserRoles, Roles
+from models import UserAuths, UserRoles, Roles, Users
 from models import Notifications, NotificationTypes
 from middleware import roles_required 
 from schemas.auth_schema import RegisterSchema, UserSetupSchema
@@ -108,13 +108,16 @@ class UserMe(MethodView):
     @jwt_required()
     def get(self):
         """
-        Deletes the logged-in user's account based on JWT identity
+        returns auth_id based on JWT identity
 
         """
         current_user_id = get_jwt_identity()
+        user = Users.query.get(current_user_id)
+        roles = [role.id for role in user.roles]
         return {
              #this is auth_id
             "logged_in_as": current_user_id,
+            "roles": roles,
             "message": "Token is valid and middleware is active"
         }, 200
     @jwt_required()
