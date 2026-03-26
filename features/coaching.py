@@ -1,10 +1,14 @@
+from datetime import datetime
+
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema
+from models.coach_profiles import ApprovalStatusEnum
+
 
 # Import your schema
 from schemas.coach_schema import CoachProfileSchema
@@ -417,3 +421,24 @@ class CoachDocumentDetailView(MethodView):
 
         # Return success message 
         return {"message": f"Document {doc_id} has been deleted."}, 200
+
+coach_blp = Blueprint("browsing", __name__, description="Operations on coaches")
+
+@coach_blp.route("/coachbrowse")
+class CoachBrowse(MethodView):
+    @coach_blp.response(200, CoachBrowsingSchema(many=True))
+    def get(self):
+
+        results = db.session.query(
+            CoachProfiles.coach_profile_id,
+            Users.first_name,
+            Users.last_name,
+            Specialties.name.label("specialty_name"),
+            CoachProfiles.years_experience,
+            CoachProfiles.bio
+        ).join(Users, CoachProfiles.user_id == Users.user_id) \
+        .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
+        .filter(CoachProfiles.status == ApprovalStatusEnum.APPROVED) \
+        .all()
+
+        return results

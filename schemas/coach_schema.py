@@ -60,4 +60,17 @@ class CoachDocumentSchema(Schema):
         sqla_session = db.session
         include_fk = True
         
+
+class CoachBrowsingSchema(Schema):
+    coach_profile_id = fields.Int(dump_only=True)
+    first_name = fields.Str(dump_only=True)
+    last_name = fields.Str(dump_only=True)
+    specialty_name = fields.Str(dump_only=True)
+    years_experience = fields.Int(dump_only=True)
+    bio = fields.Str(dump_only=True)
+
+
+#class CoachFiltering(Schema):
+#    pass
+
    
