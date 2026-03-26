@@ -25,12 +25,12 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Connection arguments
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "connect_args": {
-            "ssl_ca": ca_path,
-            "ssl_verify_cert": True
-        }
-    }
+    # SQLALCHEMY_ENGINE_OPTIONS = {
+    #     "connect_args": {
+    #         "ssl_ca": ca_path,
+    #         "ssl_verify_cert": True
+    #     }
+    # }
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
@@ -65,7 +65,7 @@ db.init_app(app)
 api = Api(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
-# jwt = JWTManager(app)
+jwt = JWTManager(app)
 
 
 #register blueprints
