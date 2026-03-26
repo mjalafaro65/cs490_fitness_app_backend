@@ -65,7 +65,7 @@ db.init_app(app)
 api = Api(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
-#jwt = JWTManager(app)
+# jwt = JWTManager(app)
 
 
 #register blueprints
