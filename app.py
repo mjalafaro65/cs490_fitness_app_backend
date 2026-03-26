@@ -10,7 +10,7 @@ from db import db  # This replaces your 'db = SQLAlchemy(app)' line later
 from middleware import roles_required
 from schemas.auth_schema import RegisterSchema
 from features.auth import auth_blp
-from features.browsing import coach_blp
+from features.coaching import coach_blp
 # ,register_user, login_user, promote_to_coach
 
 from features.client import client_blp

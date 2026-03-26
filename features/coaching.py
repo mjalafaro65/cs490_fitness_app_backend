@@ -422,13 +422,11 @@ class CoachDocumentDetailView(MethodView):
         # Return success message 
         return {"message": f"Document {doc_id} has been deleted."}, 200
 
-coach_blp = Blueprint("browsing", __name__, description="Operations on coaches")
 
 @coach_blp.route("/coachbrowse")
 class CoachBrowse(MethodView):
     @coach_blp.response(200, CoachBrowsingSchema(many=True))
     def get(self):
-
         results = db.session.query(
             CoachProfiles.coach_profile_id,
             Users.first_name,
