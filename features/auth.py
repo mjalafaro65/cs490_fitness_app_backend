@@ -108,15 +108,16 @@ class UserMe(MethodView):
     @jwt_required()
     def get(self):
         """
-        returns auth_id based on JWT identity
+        returns user auth info based on JWT identity
 
         """
-        current_user_id = get_jwt_identity()
-        user = Users.query.get(current_user_id)
-        roles = [role.id for role in user.roles]
+        current_auth_id = get_jwt_identity()
+        user_roles = UserRoles.query.filter_by(user_id=current_auth_id).all()
+
+        roles = [entry.role_id for entry in user_roles]
         return {
              #this is auth_id
-            "logged_in_as": current_user_id,
+            "logged_in_as": current_auth_id,
             "roles": roles,
             "message": "Token is valid and middleware is active"
         }, 200
