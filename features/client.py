@@ -18,26 +18,40 @@ class ClientProfileView(MethodView):
     @client_blp.response(200, ProfileSchema)
     def get(self):
         """Retrieve the authenticated client's profile details."""
-        current_user_id = get_jwt_identity()
-        profile = ClientProfiles.query.filter_by(client_id=current_user_id).first()
+        current_auth_id = get_jwt_identity()
+        
+        # find user record linked to Auth ID
+        from models import Users
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        
+        if not user:
+            abort(404, message="User record not found.")
+
+        # use user.user_id to find the profile
+        profile = ClientProfiles.query.filter_by(client_id=user.user_id).first()
         
         if not profile:
-            abort(404, message="Profile not found.")
+            abort(404, message="Profile not found. Please complete setup.")
             
         return profile
 
     @jwt_required()
-    @client_blp.arguments(ProfileSchema) # Automatically validates input
+    @client_blp.arguments(ProfileSchema)
     @client_blp.response(200, ProfileSchema)
     def put(self, data):
-        """Update the authenticated client's physical metrics and bio."""
-        current_user_id = get_jwt_identity()
+        """Update the authenticated client's metrics and bio."""
+        current_auth_id = get_jwt_identity()
         
-        profile = ClientProfiles.query.filter_by(client_id=current_user_id).first()
+        from models import Users
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        
+        if not user:
+            abort(404, message="User record not found.")
+        
+        profile = ClientProfiles.query.filter_by(client_id=user.user_id).first()
         
         if not profile:
-            profile = ClientProfiles(client_id=current_user_id)
-            db.session.add(profile)
+            abort(400, message="Profile not found. Use /auth/setup to create your profile.")
 
         for key, value in data.items():
             setattr(profile, key, value)

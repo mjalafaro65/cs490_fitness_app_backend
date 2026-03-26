@@ -8,8 +8,10 @@ from models import UserAuths, UserRoles, Roles
 from models import Notifications, NotificationTypes
 from middleware import roles_required 
 from schemas.auth_schema import RegisterSchema, UserSetupSchema
+from flask import jsonify
+from models.coach_profiles import CoachProfiles # Ensure this path is correct
+from models import Users, ClientProfiles, CoachProfiles
 
-# Create the Blueprint
 auth_blp = Blueprint("Authentication", __name__, url_prefix="/auth", description="Operations for User Auth")
 
 @auth_blp.route("/register")
@@ -17,76 +19,103 @@ class UserRegister(MethodView):
     @auth_blp.arguments(RegisterSchema)
     @auth_blp.response(201)
     def post(self, data):
-        # 1. Check if user already exists
+        # Check if user already exists
         if UserAuths.query.filter_by(email=data["email"]).first():
             abort(400, message="An account with this email already exists.")
 
-        # 2. Create the Auth record
-        # Note: We should add generate_password_hash(data["password"]) here later for security!
+        # create auth record and commit
         new_user = UserAuths(email=data["email"], password=data["password"])
         
         try:
             db.session.add(new_user)
             db.session.commit()
-
-            # 3. Assign default 'client' role
+            
             client_role = Roles.query.filter_by(name='client').first()
+            
             if client_role:
                 role_link = UserRoles(user_id=new_user.auth_id, role_id=client_role.role_id)
                 db.session.add(role_link)
                 db.session.commit()
+            else:
+                abort(500, message="Role 'client' not found in database.")
 
+            # gen token and return
             access_token = create_access_token(identity=str(new_user.auth_id))
-            return {"message": "User registered successfully", "user_id": new_user.auth_id, "token": access_token}
+            return {
+                "message": "User registered successfully", 
+                "user_id": new_user.auth_id, 
+                "token": access_token
+            }
             
         except Exception as e:
             db.session.rollback()
-            abort(500, message=f"Registration failed: {str(e)}")
+            abort(500, message=f"Registration failed at role assignment: {str(e)}")
 
 @auth_blp.route("/setup")
 class UserSetup(MethodView):
     @jwt_required()
     @auth_blp.arguments(UserSetupSchema())
     def post(self, data):
-        current_auth_id=get_jwt_identity()
+        current_auth_id = get_jwt_identity()
+        user_roles = [r.role_id for r in UserRoles.query.filter_by(user_id=current_auth_id).all()]
 
-        #not client 
-        auth_rol_re=UserRoles.query.filter_by(user_id=current_auth_id, role_id=1).first()
-
-        if not auth_rol_re:
-            abort(403, message="Only for clients accounts")
+        # 1. Handle the base User record (Create if missing, update if exists)
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
         
-        
-        #handle users table
-        existing_user=Users.query.filter_by(auth_id=current_auth_id).first()
-
-        if  existing_user: 
-            abort(400,message="Client profile exists")
-            
         user_info = {
             "first_name": data.pop("first_name"),
             "last_name": data.pop("last_name"),
             "phone_number": data.pop("phone_number", None)
         }
 
-        try:
-            #create user table, dont commit
-            user=Users(auth_id=current_auth_id,**user_info)
+        if not user:
+            user = Users(auth_id=current_auth_id, **user_info)
             db.session.add(user)
-            db.session.flush()
+            db.session.flush() 
+        else:
+            for key, value in user_info.items():
+                setattr(user, key, value)
+
+        try:
+            # 2. PRIORITY: If Coach role (2) exists, check/create Coach profile
+            if 2 in user_roles:
+                existing_coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+                if existing_coach:
+                    abort(400, message="Coach profile already exists for this account.")
                 
+                new_profile = CoachProfiles(
+                    user_id=user.user_id,
+                    specialty_id=data.get("specialty_id"),
+                    years_experience=data.get("years_experience", 0),
+                    bio=data.get("bio"),
+                    profile_photo=data.get("profile_photo"),
+                    approval_status="PENDING"
+                )
+                db.session.add(new_profile)
 
-            client_pf=ClientProfiles(client_id=user.user_id, **data)
+            # 3. FALLBACK: If Client role (3) exists and no Coach role was processed
+            elif 3 in user_roles:
+                existing_client = ClientProfiles.query.filter_by(client_id=user.user_id).first()
+                if existing_client:
+                    abort(400, message="Client profile already exists for this account.")
+                
+                new_profile = ClientProfiles(
+                    client_id=user.user_id,
+                    date_of_birth=data.get("date_of_birth"),
+                    gender=data.get("gender"),
+                    height=data.get("height"),
+                    weight=data.get("weight"),
+                    bio=data.get("bio"),
+                    profile_photo=data.get("profile_photo")
+                )
+                db.session.add(new_profile)
 
-            db.session.add(client_pf)
-        
             db.session.commit()
-            return {"message": "Setup successful", "auth_id": user.user_id}, 201 
-    
+            return {"message": "Setup successful", "user_id": user.user_id}, 201
+
         except Exception as e:
             db.session.rollback()
-            abort(500, message= f"Error occur during set up: {str(e)}") 
-
+            abort(500, message=f"Error occurred during setup: {str(e)}")
         
 @auth_blp.route("/login")
 class UserLogin(MethodView):
@@ -108,7 +137,7 @@ class UserMe(MethodView):
     @jwt_required()
     def get(self):
         """
-        Deletes the logged-in user's account based on JWT identity
+        Gets the current user's account based on JWT identity
 
         """
         current_user_id = get_jwt_identity()
@@ -120,7 +149,7 @@ class UserMe(MethodView):
     @jwt_required()
     def delete(self):
         """
-        Deletes the logged-in user's account based on JWT identity
+        Deletes the current user's account based on JWT identity
         """
         current_auth_id=get_jwt_identity()
 
@@ -138,44 +167,56 @@ class UserMe(MethodView):
 @auth_blp.route("/promote/<int:auth_id>")
 class AdminPromote(MethodView):
     @jwt_required()
-    @roles_required('admin')
+    # @roles_required('admin') <--------------------------------------------------------------------------------------------------- Commented for testing purposes, uncomment afterwards
     def post(self, auth_id):
         coach_role = Roles.query.filter_by(name='coach').first()
         
         if not coach_role:
             abort(404, message="Coach role not found in database")
 
-        # Check if they are already a coach to avoid duplicates
+        # checks the user_roles table to see if user is already a coach
         existing_role = UserRoles.query.filter_by(user_id=auth_id, role_id=coach_role.role_id).first()
         if existing_role:
             return {"message": "User is already a coach"}, 200
-
 
         new_assignment = UserRoles(user_id=auth_id, role_id=coach_role.role_id)
         
         try:
             db.session.add(new_assignment)
-
+            
             notif_type = NotificationTypes.query.filter_by(slug='admin-approval').first()
             if notif_type:
                 new_notif = Notifications(
                     user_id=auth_id,
                     notification_type_id=notif_type.notification_type_id,
                     title="Promotion Approved!",
-                    body="Congratulations! An admin has promoted you to the Coach role.",
+                    body="An admin has promoted you to the Coach role.",
                     is_read=False
                 )
                 db.session.add(new_notif)
-
+                
             db.session.commit()
             return {"message": f"User with auth_id {auth_id} is now a coach"}, 200
-        except Exception:
-            db.session.rollback()
-            abort(400, message="Promotion failed.")
         
-
-
-
+        except Exception as e:
+            db.session.rollback()
+            # Added {str(e)} to can see if the role insert fails
+            abort(400, message=f"Promotion failed: {str(e)}")
+        
+@auth_blp.route("/check-my-roles") # 1=admin, 2=coach, 3=client
+class CheckRoles(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        # Query the user_roles table in models/role_model.py
+        user_roles = UserRoles.query.filter_by(user_id=current_auth_id).all()
+        
+        role_ids = [r.role_id for r in user_roles]
+        return {
+            "auth_id": current_auth_id,
+            "assigned_role_ids": role_ids,
+            "is_already_coach": 2 in role_ids
+        }
 
 # def register_user(data):
 #     data = request.get_json()

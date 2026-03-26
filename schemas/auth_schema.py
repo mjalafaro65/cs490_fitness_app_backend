@@ -1,4 +1,3 @@
-from wsgiref import validate
 from marshmallow import Schema, fields, validate
 
 class RegisterSchema(Schema):
@@ -6,19 +5,28 @@ class RegisterSchema(Schema):
     password = fields.Str(required=True, validate=lambda p: len(p) >= 6)
 
 class UserSetupSchema(Schema):
-    #set up user info
-    first_name = fields.Str(validate=validate.Length(min=1),required=True)
-    last_name = fields.Str(validate=validate.Length(min=1),required=True)
+    # shared info
+    first_name = fields.Str(validate=validate.Length(min=1), required=True)
+    last_name = fields.Str(validate=validate.Length(min=1), required=True)
     phone_number = fields.Str(required=False, allow_none=True)
+    profile_photo = fields.Str(required=False, allow_none=True, validate=validate.Length(max=255))
+    bio = fields.Str(required=False, allow_none=True)
 
-    #set up client pf info
-    date_of_birth = fields.Date(required=True)
+    # client specific info
+    date_of_birth = fields.Date(required=False, allow_none=True)
     gender = fields.Str(
         required=False, 
         allow_none=True,
-        validate=validate.OneOf(['male', 'female', 'prefer_not_to_say', 'other'])
+        validate=validate.OneOf(['male', 'female'])
     )
-    profile_photo = fields.Str(required=False, allow_none=True)
-    bio = fields.Str(required=False, allow_none=True)
-    height = fields.Float(required=False,allow_none=True,)
-    weight = fields.Float(required=False,allow_none=True,)
+    height = fields.Float(required=False, allow_none=True)
+    weight = fields.Float(required=False, allow_none=True)
+
+    # coach specific
+    specialty_id = fields.Int(required=False, allow_none=True)
+    years_experience = fields.Int(required=False, allow_none=True, validate=validate.Range(min=0))
+    
+    # read-only output
+    coach_profile_id = fields.Int(dump_only=True)
+    user_id = fields.Int(dump_only=True)
+    approval_status = fields.Str(dump_only=True)
