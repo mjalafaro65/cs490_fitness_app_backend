@@ -4,7 +4,7 @@ from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from db import db
-from models import UserAuths, UserRoles, Roles
+from models import UserAuths, UserRoles, Roles, Users
 from models import Notifications, NotificationTypes
 from middleware import roles_required 
 from schemas.auth_schema import RegisterSchema, UserSetupSchema
@@ -140,10 +140,14 @@ class UserMe(MethodView):
         Gets the current user's account based on JWT identity
 
         """
-        current_user_id = get_jwt_identity()
+        current_auth_id = get_jwt_identity()
+        user_roles = UserRoles.query.filter_by(user_id=current_auth_id).all()
+
+        roles = [entry.role_id for entry in user_roles]
         return {
              #this is auth_id
-            "logged_in_as": current_user_id,
+            "logged_in_as": current_auth_id,
+            "roles": roles,
             "message": "Token is valid and middleware is active"
         }, 200
     @jwt_required()
