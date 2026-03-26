@@ -2,10 +2,11 @@ from datetime import datetime
 import enum
 from db import db
 
-class ApprovalStatusEnum(enum.Enum):
-    PENDING = "PENDING"
-    APPROVED = "APPROVED"
-    DENIED = "DENIED"
+class ApprovalStatusEnum(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    SWITCHED= "switched"
 
 class CoachProfiles(db.Model):
     __tablename__ = 'coach_profiles'
@@ -18,12 +19,7 @@ class CoachProfiles(db.Model):
     
     profile_photo = db.Column(db.String(255), nullable=True) 
     
-    approval_status = db.Column(
-        db.Enum('PENDING', 'APPROVED', 'DENIED'), 
-        name='approval_status',
-        nullable=True, 
-        default='PENDING'
-    )
+    status = db.Column(db.Enum(ApprovalStatusEnum), nullable=False, default=ApprovalStatusEnum.PENDING)
     
     approved_by_admin_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
     approved_at = db.Column(db.DateTime, nullable=True)

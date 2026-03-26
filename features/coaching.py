@@ -10,6 +10,7 @@ from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, Co
 from models.coach_profiles import ApprovalStatusEnum
 
 
+
 # Import your schema
 from schemas.coach_schema import CoachProfileSchema
 
@@ -50,7 +51,7 @@ class TopCoach(MethodView):
             .join(rating_stmt, CoachProfiles.coach_profile_id == rating_stmt.c.coach_profile_id)
             .join(UserRoles, Users.auth_id == UserRoles.user_id)
             .filter(UserRoles.role_id == 2)
-            .filter(CoachProfiles.approval_status == 'APPROVED') # Only show approved coaches
+            .filter(CoachProfiles.status == 'approved') # Only show approved coaches
             .order_by(desc(rating_stmt.c.avg_rating), desc(rating_stmt.c.total_reviews))
             .limit(3)
         )
@@ -255,10 +256,10 @@ class CoachProfileView(MethodView):
                 val_upper = value.upper() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if val_upper == ApprovalStatusEnum.approved:
+                    if val_upper == ApprovalStatusEnum.APPROVED:
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
-                elif val_upper == ApprovalStatusEnum.switched:
+                elif val_upper == ApprovalStatusEnum.SWITCHED:
                     setattr(profile, key, value)
                 else:
                     continue
