@@ -10,10 +10,10 @@ from db import db  # This replaces your 'db = SQLAlchemy(app)' line later
 from middleware import roles_required
 from schemas.auth_schema import RegisterSchema
 from features.auth import auth_blp
+from features.browsing import coach_blp
 # ,register_user, login_user, promote_to_coach
 
 from features.client import client_blp
-from features.coaching import coach_blp
 
 load_dotenv()
 
@@ -65,7 +65,7 @@ db.init_app(app)
 api = Api(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
-jwt = JWTManager(app)
+#jwt = JWTManager(app)
 
 
 #register blueprints
