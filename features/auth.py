@@ -21,7 +21,7 @@ class UserRegister(MethodView):
     def post(self, data):
         # Check if user already exists
         if UserAuths.query.filter_by(email=data["email"]).first():
-            abort(400, message="An account with this email already exists.")
+            abort(400, description="An account with this email already exists.")
 
         # create auth record and commit
         new_user = UserAuths(email=data["email"], password=data["password"])
@@ -37,7 +37,7 @@ class UserRegister(MethodView):
                 db.session.add(role_link)
                 db.session.commit()
             else:
-                abort(500, message="Role 'client' not found in database.")
+                abort(500, description="Role 'client' not found in database.")
 
             # gen token and return
             access_token = create_access_token(identity=str(new_user.auth_id))
@@ -49,7 +49,7 @@ class UserRegister(MethodView):
             
         except Exception as e:
             db.session.rollback()
-            abort(500, message=f"Registration failed at role assignment: {str(e)}")
+            abort(500, description=f"Registration failed at role assignment: {str(e)}")
 
 @auth_blp.route("/setup")
 class UserSetup(MethodView):
@@ -81,7 +81,7 @@ class UserSetup(MethodView):
             if 2 in user_roles:
                 existing_coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
                 if existing_coach:
-                    abort(400, message="Coach profile already exists for this account.")
+                    abort(400, description="Coach profile already exists for this account.")
                 
                 new_profile = CoachProfiles(
                     user_id=user.user_id,
@@ -97,7 +97,7 @@ class UserSetup(MethodView):
             elif 3 in user_roles:
                 existing_client = ClientProfiles.query.filter_by(client_id=user.user_id).first()
                 if existing_client:
-                    abort(400, message="Client profile already exists for this account.")
+                    abort(400, description="Client profile already exists for this account.")
                 
                 new_profile = ClientProfiles(
                     client_id=user.user_id,
@@ -115,7 +115,7 @@ class UserSetup(MethodView):
 
         except Exception as e:
             db.session.rollback()
-            abort(500, message=f"Error occurred during setup: {str(e)}")
+            abort(500, description=f"Error occurred during setup: {str(e)}")
         
 @auth_blp.route("/login")
 class UserLogin(MethodView):
@@ -130,7 +130,7 @@ class UserLogin(MethodView):
             token = create_access_token(identity=str(user.auth_id))
             return {"access_token": token}, 200
         
-        abort(401, message="Invalid email or password")
+        abort(401, description="Invalid email or password")
 
 @auth_blp.route("/me")
 class UserMe(MethodView):
@@ -165,7 +165,7 @@ class UserMe(MethodView):
             return {"message": "Account successfully deleted"}, 200
         except:
             db.session.rollback()
-            abort(500, message="Could not delete account")
+            abort(500, description="Could not delete account")
 
 
 @auth_blp.route("/promote/<int:auth_id>")
@@ -176,7 +176,7 @@ class AdminPromote(MethodView):
         coach_role = Roles.query.filter_by(name='coach').first()
         
         if not coach_role:
-            abort(404, message="Coach role not found in database")
+            abort(404, description="Coach role not found in database")
 
         # checks the user_roles table to see if user is already a coach
         existing_role = UserRoles.query.filter_by(user_id=auth_id, role_id=coach_role.role_id).first()
@@ -205,7 +205,7 @@ class AdminPromote(MethodView):
         except Exception as e:
             db.session.rollback()
             # Added {str(e)} to can see if the role insert fails
-            abort(400, message=f"Promotion failed: {str(e)}")
+            abort(400, description=f"Promotion failed: {str(e)}")
         
 @auth_blp.route("/check-my-roles") # 1=admin, 2=coach, 3=client
 class CheckRoles(MethodView):

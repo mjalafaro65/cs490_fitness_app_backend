@@ -85,7 +85,7 @@ class TopCoach(MethodView):
             return {"coaches": top_coaches}, 200
 
         except Exception as e:
-            abort(500, message=f"Failed to fetch coaches: {str(e)}")
+            abort(500, description=f"Failed to fetch coaches: {str(e)}")
 
 # @coach_blp.route("/profile")
 # class CoachProfileView(MethodView):
@@ -97,11 +97,11 @@ class TopCoach(MethodView):
 #         user = Users.query.filter_by(auth_id=auth_id).first()
         
 #         if not user:
-#             abort(404, message="User not found.")
+#             abort(404, description="User not found.")
 
 #         profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
 #         if not profile:
-#             abort(404, message="Coach profile not found. Please complete setup first.")
+#             abort(404, description="Coach profile not found. Please complete setup first.")
             
 #         return profile
 
@@ -114,13 +114,13 @@ class TopCoach(MethodView):
 #         user = Users.query.filter_by(auth_id=auth_id).first()
         
 #         if not user:
-#             abort(404, message="User not found.")
+#             abort(404, description="User not found.")
 
 #         profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
         
 #         # Refactored: No longer creates profile; only updates.
 #         if not profile:
-#             abort(400, message="Coach profile not found. Use /auth/setup to create your profile.")
+#             abort(400, description="Coach profile not found. Use /auth/setup to create your profile.")
 
 #         # Update fields dynamically
 #         for key, value in data.items():
@@ -131,7 +131,7 @@ class TopCoach(MethodView):
 #             return profile
 #         except Exception as e:
 #             db.session.rollback()
-#             abort(500, message=f"Database error during update: {str(e)}")
+#             abort(500, description=f"Database error during update: {str(e)}")
 
 @coach_blp.route("/init-specialties")
 class InitSpecialties(MethodView):
@@ -157,7 +157,7 @@ class InitSpecialties(MethodView):
             
         except Exception as e:
             db.session.rollback()
-            abort(500, message=f"Failed to initialize specialties: {str(e)}")
+            abort(500, description=f"Failed to initialize specialties: {str(e)}")
             
 @coach_blp.route("/coach-profile")
 class CoachProfileView(MethodView):
@@ -174,7 +174,7 @@ class CoachProfileView(MethodView):
         curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
 
         if not curr_user_id:
-            abort(401, message="User not found.")
+            abort(401, description="User not found.")
 
         target_user_id = args.get("user_id") or None
 
@@ -188,7 +188,7 @@ class CoachProfileView(MethodView):
             ).first()
 
             if not is_admin:
-                abort(403, message="Admin access required to view other profiles.")
+                abort(403, description="Admin access required to view other profiles.")
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
         
@@ -196,7 +196,7 @@ class CoachProfileView(MethodView):
             profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
 
         if not profile:
-            abort(404, message="Coach profile not found.")
+            abort(404, description="Coach profile not found.")
         return profile
     
     @jwt_required()
@@ -211,7 +211,7 @@ class CoachProfileView(MethodView):
 
         if CoachProfiles.query.filter_by(user_id=curr_user_id).first():
 
-            abort(400, message="A profile already exists for this user.")
+            abort(400, description="A profile already exists for this user.")
 
         profile = CoachProfiles(**data, user_id=curr_user_id)
         db.session.add(profile)
@@ -241,7 +241,7 @@ class CoachProfileView(MethodView):
 
         #if its not user or admin 
         if int(target_user_id) != int(curr_user_id) and not is_admin:
-            abort(403, message="Unauthorized to edit this profile.")
+            abort(403, description="Unauthorized to edit this profile.")
 
         profile = CoachProfiles.query.filter_by(user_id=target_user_id).first_or_404()    
 
@@ -287,7 +287,7 @@ class CoachProfileView(MethodView):
             db.session.commit()
         except Exception:
             db.session.rollback()
-            abort(500, message="Database error occurred.")
+            abort(500, description="Database error occurred.")
 
         return profile
 
@@ -360,7 +360,7 @@ class CoachDocumentDetailView(MethodView):
         result = db.session.execute(stmt).scalar()
         
         if not result:
-            abort(404, message="Document not found or access denied.")
+            abort(404, description="Document not found or access denied.")
             
         return result
     
@@ -386,7 +386,7 @@ class CoachDocumentDetailView(MethodView):
         document = db.session.execute(stmt).scalar()
 
         if not document:
-            abort(404, message="Document not found or access denied.")
+            abort(404, description="Document not found or access denied.")
 
         #Apply the updates
         if 'document_url' in update_data:
@@ -422,7 +422,7 @@ class CoachDocumentDetailView(MethodView):
 
         #If not found or not theirs
         if not document:
-            abort(404, message="Document not found or access denied.")
+            abort(404, description="Document not found or access denied.")
 
         
         db.session.delete(document)

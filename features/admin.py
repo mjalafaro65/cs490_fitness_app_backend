@@ -58,7 +58,7 @@ class CoachDocumentsAdminView(MethodView):
 
         docs=db.session.execute(stmt).scalars().all()
         if not docs:
-            abort(404, message="No documents associated with id.")
+            abort(404, description="No documents associated with id.")
 
         return docs
     

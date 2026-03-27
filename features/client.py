@@ -25,13 +25,13 @@ class ClientProfileView(MethodView):
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         
         if not user:
-            abort(404, message="User record not found.")
+            abort(404, description="User record not found.")
 
         # use user.user_id to find the profile
         profile = ClientProfiles.query.filter_by(client_id=user.user_id).first()
         
         if not profile:
-            abort(404, message="Profile not found. Please complete setup.")
+            abort(404, description="Profile not found. Please complete setup.")
             
         return profile
 
@@ -46,12 +46,12 @@ class ClientProfileView(MethodView):
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         
         if not user:
-            abort(404, message="User record not found.")
+            abort(404, description="User record not found.")
         
         profile = ClientProfiles.query.filter_by(client_id=user.user_id).first()
         
         if not profile:
-            abort(400, message="Profile not found. Use /auth/setup to create your profile.")
+            abort(400, description="Profile not found. Use /auth/setup to create your profile.")
 
         for key, value in data.items():
             setattr(profile, key, value)
@@ -61,4 +61,4 @@ class ClientProfileView(MethodView):
             return profile
         except Exception as e:
             db.session.rollback()
-            abort(500, message=f"Database error: {str(e)}")
+            abort(500, description=f"Database error: {str(e)}")
