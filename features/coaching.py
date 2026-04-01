@@ -182,12 +182,13 @@ class CoachProfileView(MethodView):
         #######need to check if its admin doing the call
         if target_user_id and target_user_id != curr_user_id:
             # Check if curr_id has the 'admin' role
-            is_admin = db.session.query(UserRoles).join(Roles).filter(
+            is_admin_or_client = db.session.query(UserRoles).join(Roles).filter(
                 UserRoles.user_id == curr_auth_id,
-                Roles.name == 'admin'
+                Roles.name == 'admin',
+                Roles.name == 'client',
             ).first()
 
-            if not is_admin:
+            if not is_admin_or_client:
                 abort(403, description="Admin access required to view other profiles.")
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()

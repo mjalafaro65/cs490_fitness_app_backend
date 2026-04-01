@@ -11,6 +11,7 @@ from middleware import roles_required
 from schemas.auth_schema import RegisterSchema
 from features.auth import auth_blp
 from features.coaching import coach_blp
+from features.admin import admin_blp
 # ,register_user, login_user, promote_to_coach
 
 from features.client import client_blp
@@ -72,6 +73,7 @@ jwt = JWTManager(app)
 api.register_blueprint(auth_blp)
 api.register_blueprint(client_blp)
 api.register_blueprint(coach_blp)
+api.register_blueprint(admin_blp)
 
 @app.route('/')
 def home():

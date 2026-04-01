@@ -37,7 +37,7 @@ class UserRegister(MethodView):
                 db.session.add(role_link)
                 db.session.commit()
             else:
-                abort(500, description="Role 'client' not found in database.")
+                return {"message": "Role 'client' not found in database."}, 500
 
             # gen token and return
             access_token = create_access_token(identity=str(new_user.auth_id))
@@ -49,73 +49,51 @@ class UserRegister(MethodView):
             
         except Exception as e:
             db.session.rollback()
-            abort(500, description=f"Registration failed at role assignment: {str(e)}")
+            return {"message": f"Registration failed at role assignment: {str(e)}"}, 500
 
 @auth_blp.route("/setup")
 class UserSetup(MethodView):
-    @jwt_required()
     @auth_blp.arguments(UserSetupSchema())
+    @jwt_required()
     def post(self, data):
-        current_auth_id = get_jwt_identity()
-        user_roles = [r.role_id for r in UserRoles.query.filter_by(user_id=current_auth_id).all()]
+        current_auth_id=get_jwt_identity()
 
-        # 1. Handle the base User record (Create if missing, update if exists)
-        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        #not client 
+        auth_rol_re=UserRoles.query.filter_by(user_id=current_auth_id, role_id=1).first()
+
+        if not auth_rol_re:
+            return {"msg":"Only for clients accounts"}, 403
         
+        
+        #handle users table
+        existing_user=Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if  existing_user: 
+            return {"msg":"Client profile exists"},400
+            
         user_info = {
             "first_name": data.pop("first_name"),
             "last_name": data.pop("last_name"),
             "phone_number": data.pop("phone_number", None)
         }
 
-        if not user:
-            user = Users(auth_id=current_auth_id, **user_info)
-            db.session.add(user)
-            db.session.flush() 
-        else:
-            for key, value in user_info.items():
-                setattr(user, key, value)
-
         try:
-            # 2. PRIORITY: If Coach role (2) exists, check/create Coach profile
-            if 2 in user_roles:
-                existing_coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
-                if existing_coach:
-                    abort(400, description="Coach profile already exists for this account.")
+            #create user table, dont commit
+            user=Users(auth_id=current_auth_id,**user_info)
+            db.session.add(user)
+            db.session.flush()
                 
-                new_profile = CoachProfiles(
-                    user_id=user.user_id,
-                    specialty_id=data.get("specialty_id"),
-                    years_experience=data.get("years_experience", 0),
-                    bio=data.get("bio"),
-                    profile_photo=data.get("profile_photo"),
-                    approval_status="PENDING"
-                )
-                db.session.add(new_profile)
 
-            # 3. FALLBACK: If Client role (3) exists and no Coach role was processed
-            elif 3 in user_roles:
-                existing_client = ClientProfiles.query.filter_by(client_id=user.user_id).first()
-                if existing_client:
-                    abort(400, description="Client profile already exists for this account.")
-                
-                new_profile = ClientProfiles(
-                    client_id=user.user_id,
-                    date_of_birth=data.get("date_of_birth"),
-                    gender=data.get("gender"),
-                    height=data.get("height"),
-                    weight=data.get("weight"),
-                    bio=data.get("bio"),
-                    profile_photo=data.get("profile_photo")
-                )
-                db.session.add(new_profile)
+            client_pf=ClientProfiles(client_id=user.user_id, **data)
 
+            db.session.add(client_pf)
+        
             db.session.commit()
-            return {"message": "Setup successful", "user_id": user.user_id}, 201
-
+            return {"msg": "Setup successful", "auth_id": user.user_id}, 201 
+    
         except Exception as e:
             db.session.rollback()
-            abort(500, description=f"Error occurred during setup: {str(e)}")
+            return {"msg":f"Error occur during set up: {str(e)}"}, 400
         
 @auth_blp.route("/login")
 class UserLogin(MethodView):
@@ -128,7 +106,7 @@ class UserLogin(MethodView):
         if user and user.password == data.get("password"):
             # Create JWT Token
             token = create_access_token(identity=str(user.auth_id))
-            return {"access_token": token}, 200
+            return {"token": token}, 200
         
         abort(401, description="Invalid email or password")
 
@@ -148,7 +126,7 @@ class UserMe(MethodView):
              #this is auth_id
             "logged_in_as": current_auth_id,
             "roles": roles,
-            "message": "Token is valid and middleware is active"
+            "msg": "Token is valid and middleware is active"
         }, 200
     @jwt_required()
     def delete(self):
@@ -162,7 +140,7 @@ class UserMe(MethodView):
         try:
             db.session.delete(user_auth)
             db.session.commit()
-            return {"message": "Account successfully deleted"}, 200
+            return {"msg": "Account successfully deleted"}, 200
         except:
             db.session.rollback()
             abort(500, description="Could not delete account")
@@ -200,7 +178,7 @@ class AdminPromote(MethodView):
                 db.session.add(new_notif)
                 
             db.session.commit()
-            return {"message": f"User with auth_id {auth_id} is now a coach"}, 200
+            return {"msg": f"User with auth_id {auth_id} is now a coach"}, 200
         
         except Exception as e:
             db.session.rollback()
