@@ -121,13 +121,22 @@ class UserMe(MethodView):
         current_auth_id = get_jwt_identity()
         user_roles = UserRoles.query.filter_by(user_id=current_auth_id).all()
 
+        user=Users.query.filter_by(auth_id=current_auth_id).first()
+        if user:
+            user_id = user.user_id
+        else:
+            user_id = None       
+
+
         roles = [entry.role_id for entry in user_roles]
         return {
              #this is auth_id
             "logged_in_as": current_auth_id,
+            "user_id":user_id,   
             "roles": roles,
             "msg": "Token is valid and middleware is active"
         }, 200
+    
     @jwt_required()
     def delete(self):
         """

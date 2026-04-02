@@ -168,7 +168,7 @@ class CoachProfileView(MethodView):
         """
         Get coach profile.
         Coach: Calls /coach-profile (gets their own).
-        Admin: Calls /coach-profile?user_id=10 (gets specific user).
+        Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
         curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
@@ -179,7 +179,7 @@ class CoachProfileView(MethodView):
         target_user_id = args.get("user_id") or None
 
         #if target id is provided check if its the logged in user
-        #######need to check if its admin doing the call
+        #######need to check if its admin or client doing the call
         if target_user_id and target_user_id != curr_user_id:
             # Check if curr_id has the 'admin' role
             is_admin_or_client = db.session.query(UserRoles).join(Roles).filter(
