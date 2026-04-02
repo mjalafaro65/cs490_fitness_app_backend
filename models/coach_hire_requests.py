@@ -3,9 +3,9 @@ import enum
 from db import db
 
 class StatusEnum(enum.Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
+    pending = "pending"
+    approved = "approved"
+    reject = "rejected"
 
 class CoachHireRequests(db.Model):
     __tablename__ = 'coach_hire_requests'

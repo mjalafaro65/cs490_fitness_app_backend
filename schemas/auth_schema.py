@@ -17,16 +17,10 @@ class UserSetupSchema(Schema):
     gender = fields.Str(
         required=False, 
         allow_none=True,
-        validate=validate.OneOf(['male', 'female'])
+        validate=validate.OneOf(['male', 'female', 'other',"prefer_not_to_say"])
     )
     height = fields.Float(required=False, allow_none=True)
     weight = fields.Float(required=False, allow_none=True)
 
-    # coach specific
-    specialty_id = fields.Int(required=False, allow_none=True)
-    years_experience = fields.Int(required=False, allow_none=True, validate=validate.Range(min=0))
-    
     # read-only output
-    coach_profile_id = fields.Int(dump_only=True)
     user_id = fields.Int(dump_only=True)
-    approval_status = fields.Str(dump_only=True)
