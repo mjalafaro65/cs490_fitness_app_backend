@@ -11,6 +11,6 @@ class WorkoutPlanDayExercises(db.Model):
     sets = db.Column(db.Integer, nullable=False)
     reps = db.Column(db.Integer, nullable=False)
     weight = db.Column(db.Numeric(10, 2))
-    duraction_minutes = db.Column(db.Integer)
+    duration_minutes = db.Column(db.Integer)
     notes = db.Column(db.Text)
     sort_order = db.Column(db.Integer, nullable=False)

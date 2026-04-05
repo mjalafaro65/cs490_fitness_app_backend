@@ -133,7 +133,7 @@ def _serialize_plan_day(
                     "sets": row.sets,
                     "reps": row.reps,
                     "weight": float(row.weight) if row.weight is not None else None,
-                    "duration_minutes": row.duraction_minutes,
+                    "duration_minutes": row.duration_minutes,
                     "notes": row.notes,
                     "sort_order": row.sort_order,
                 }
@@ -208,7 +208,7 @@ def _duplicate_plan_for_user(
                     sets=line.sets,
                     reps=line.reps,
                     weight=line.weight,
-                    duraction_minutes=line.duraction_minutes,
+                    duration_minutes=line.duration_minutes,
                     notes=line.notes,
                     sort_order=line.sort_order,
                 )
@@ -273,6 +273,7 @@ class ExerciseItem(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def get(self, exercise_id):
+        """Get exercise details by ID."""
         user = _current_user()
         ex = Exercises.query.get(exercise_id)
         if not ex:
@@ -285,6 +286,7 @@ class ExerciseItem(MethodView):
     @workout_blp.arguments(ExerciseUpdateSchema)
     @workout_blp.response(200)
     def patch(self, data, exercise_id):
+        """Update your custom exercise (cannot edit catalog defaults)."""
         user = _current_user()
         ex = Exercises.query.get(exercise_id)
         if not ex:
@@ -315,6 +317,7 @@ class ExerciseItem(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def delete(self, exercise_id):
+        """Deactivate your custom exercise (cannot delete catalog defaults)."""
         user = _current_user()
         ex = Exercises.query.get(exercise_id)
         if not ex:
@@ -360,6 +363,7 @@ class MyPlans(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def get(self):
+        """Get all workout plans you own (private and public)."""
         user = _current_user()
         plans = (
             WorkoutPlans.query.filter_by(owner_user_id=user.user_id)
@@ -492,6 +496,7 @@ class PlanItem(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def get(self, plan_id):
+        """Get workout plan details with all days and exercises."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan or not _plan_readable(plan, user.user_id):
@@ -502,6 +507,7 @@ class PlanItem(MethodView):
     @workout_blp.arguments(PlanUpdateSchema)
     @workout_blp.response(200)
     def patch(self, data, plan_id):
+        """Update your workout plan (name, description, public status)."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan:
@@ -579,6 +585,7 @@ class PlanDayItem(MethodView):
     @workout_blp.arguments(PlanDayUpdateSchema)
     @workout_blp.response(200)
     def patch(self, data, plan_id, day_id):
+        """Update training day details (label, weekday, time, order)."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan or not _plan_writable(plan, user.user_id):
@@ -606,6 +613,7 @@ class PlanDayItem(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def delete(self, plan_id, day_id):
+        """Remove training day and all its exercises."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan or not _plan_writable(plan, user.user_id):
@@ -631,6 +639,7 @@ class PlanDayExercises(MethodView):
     @workout_blp.arguments(DayExerciseCreateSchema)
     @workout_blp.response(201)
     def post(self, data, plan_id, day_id):
+        """Add exercise to training day with sets, reps, weight, and notes."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan or not _plan_writable(plan, user.user_id):
@@ -652,7 +661,7 @@ class PlanDayExercises(MethodView):
             sets=data["sets"],
             reps=data["reps"],
             weight=weight,
-            duraction_minutes=data.get("duration_minutes"),
+            duration_minutes=data.get("duration_minutes"),
             notes=data.get("notes"),
             sort_order=data["sort_order"],
         )
@@ -669,7 +678,7 @@ class PlanDayExercises(MethodView):
             "sets": line.sets,
             "reps": line.reps,
             "weight": float(line.weight) if line.weight is not None else None,
-            "duration_minutes": line.duraction_minutes,
+            "duration_minutes": line.duration_minutes,
             "notes": line.notes,
             "sort_order": line.sort_order,
         }
@@ -685,6 +694,7 @@ class PlanDayExerciseItem(MethodView):
     @workout_blp.arguments(DayExerciseUpdateSchema)
     @workout_blp.response(200)
     def patch(self, data, plan_id, day_id, de_id):
+        """Update exercise details (sets, reps, weight, duration, notes). de_id = day_exercise_id from response."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan or not _plan_writable(plan, user.user_id):
@@ -706,7 +716,7 @@ class PlanDayExerciseItem(MethodView):
         if "weight" in data:
             line.weight = data["weight"]
         if "duration_minutes" in data:
-            line.duraction_minutes = data["duration_minutes"]
+            line.duration_minutes = data["duration_minutes"]
         if "notes" in data:
             line.notes = data["notes"]
         if "sort_order" in data and data["sort_order"] is not None:
@@ -724,7 +734,7 @@ class PlanDayExerciseItem(MethodView):
             "sets": line.sets,
             "reps": line.reps,
             "weight": float(line.weight) if line.weight is not None else None,
-            "duration_minutes": line.duraction_minutes,
+            "duration_minutes": line.duration_minutes,
             "notes": line.notes,
             "sort_order": line.sort_order,
         }
@@ -732,6 +742,7 @@ class PlanDayExerciseItem(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def delete(self, plan_id, day_id, de_id):
+        """Remove exercise from training day. de_id = day_exercise_id from response."""
         user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan or not _plan_writable(plan, user.user_id):
@@ -783,7 +794,7 @@ class PlanAssignments(MethodView):
             db.session.rollback()
             abort(500, description=str(e))
         return {
-            "workout_plan_assignment_id": row.workout_plan_assignment_id,
+            "assignment_id": row.assignment_id,
             "plan_id": row.plan_id,
             "assigned_to_user_id": row.assigned_to_user_id,
             "repeat_rule": row.repeat_rule.value if row.repeat_rule else None,

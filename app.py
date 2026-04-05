@@ -68,6 +68,7 @@ migrate = Migrate(app, db)
 api = Api(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens never expire for development
 jwt = JWTManager(app)
 
 
