@@ -191,10 +191,3 @@ class EditDailyView(MethodView):
             db.session.rollback()
             abort(500, description="Failed to update the daily log.")
 
-### Writing a review for a coach
-@client_blp.route("/coach-review")
-class CoachReviewView(MethodView):
-    @jwt_required()
-    def post(self):
-        # Implementation for posting a review for a coach
-        
