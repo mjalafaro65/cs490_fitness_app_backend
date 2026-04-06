@@ -7,6 +7,7 @@ from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema
+from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
 
 
@@ -446,7 +447,7 @@ class CoachBrowse(MethodView):
             CoachProfiles.bio
         ).join(Users, CoachProfiles.user_id == Users.user_id) \
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
-        .filter(CoachProfiles.status == ApprovalStatusEnum.APPROVED) \
+        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) \
         .all()
 
         return results
@@ -469,7 +470,7 @@ class CoachBrowseFilter(MethodView):
             CoachProfiles.bio
         ).join(Users, CoachProfiles.user_id == Users.user_id) \
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
-        .filter(CoachProfiles.status == ApprovalStatusEnum.APPROVED) 
+        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) 
         
 
         if specialty_id:
@@ -505,13 +506,16 @@ custom
 
 """
 
+
 @coach_blp.route("/coachrecommendations")
 class CoachRecommendations(MethodView):
     @jwt_required()
     @coach_blp.response(200, CoachBrowsingSchema(many=True))
     def get(self):
         current_auth_id = get_jwt_identity()
-        
+        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=current_auth_id).scalar()
+        if not curr_user_id:
+            abort(404, description="User not found.")
         
         goal_to_specialty_map = {
             "weight": 1,
@@ -526,7 +530,7 @@ class CoachRecommendations(MethodView):
 
         latest_survey = (
             DailySurvey.query
-            .filter_by(client_id=current_auth_id)
+            .filter_by(client_id=curr_user_id)
             .order_by(DailySurvey.date.desc())
             .first()
         )
@@ -548,3 +552,4 @@ class CoachRecommendations(MethodView):
                 query = query.filter(CoachProfiles.specialty_id == target_specialty_id)
 
         return query.all()
+        
