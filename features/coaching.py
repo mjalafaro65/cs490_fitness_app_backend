@@ -198,7 +198,7 @@ class CoachProfileView(MethodView):
             profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
 
         if not profile:
-            abort(404, description="Coach profile not found.")
+            return {"message":"Coach profile not found."}, 404
         return profile
     
     @jwt_required()
@@ -263,13 +263,14 @@ class CoachProfileView(MethodView):
             # if  coach tries to change a restricted field, just ignore it
             
             if key == "status":
-                val_upper = value.upper() if isinstance(value, str) else value
+                current_status_upper = profile.status.lower()
+                val_upper = value.lower() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if val_upper == ApprovalStatusEnum.APPROVED:
+                    if val_upper == ApprovalStatusEnum.approved:
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
-                elif val_upper == ApprovalStatusEnum.SWITCHED:
+                elif val_upper == ApprovalStatusEnum.switched or current_status_upper == ApprovalStatusEnum.switched:
                     setattr(profile, key, value)
                 else:
                     continue
@@ -447,7 +448,7 @@ class CoachBrowse(MethodView):
             CoachProfiles.bio
         ).join(Users, CoachProfiles.user_id == Users.user_id) \
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
-        .filter(CoachProfiles.status == ApprovalStatusEnum.APPROVED) \
+        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) \
         .all()
 
         return results

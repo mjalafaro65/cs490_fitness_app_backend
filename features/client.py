@@ -89,13 +89,13 @@ class ClientProfileView(MethodView):
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         
         if not user:
-            abort(404, description="User record not found.")
+            return {"msg":"User record not found."}, 404
 
         # use user.user_id to find the profile
         profile = ClientProfiles.query.filter_by(client_id=user.user_id).first()
         
         if not profile:
-            abort(404, description="Profile not found. Please complete setup.")
+            return {"msg":"Profile not found. Please complete setup."}, 404
             
         return profile
 
