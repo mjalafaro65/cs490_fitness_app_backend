@@ -171,8 +171,9 @@ class CoachProfileView(MethodView):
         Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
-        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
-
+        result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
+        curr_user_id = result[0] if result else None
+        
         if not curr_user_id:
             abort(401, description="User not found.")
 
@@ -309,7 +310,7 @@ class CoachDocumentView(MethodView):
             .join(Users, CoachProfiles.user_id == Users.user_id)
             .filter(Users.auth_id == curr_auth_id)
         )
-        profile = db.session.execute(stmt).scalar()
+        profile = db.session.execute(stmt).first()
         
         if not profile:
             return {"message": f"No Profile found for AuthID: {curr_auth_id}"}, 404

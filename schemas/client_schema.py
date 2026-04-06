@@ -23,6 +23,7 @@ class ProfileSchema(Schema):
     )
     
     bio = fields.Str(validate=validate.Length(max=500))
+    profile_photo=fields.Str(required=False)
     height = fields.Float(validate=validate.Range(min=0))
     weight = fields.Float(validate=validate.Range(min=0))
     
