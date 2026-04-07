@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from flask_smorest import Api, Blueprint
 from flask_jwt_extended import JWTManager, get_jwt_identity, jwt_required
+from flask_migrate import Migrate
 from db import db  # This replaces your 'db = SQLAlchemy(app)' line later
 from middleware import roles_required
 from schemas.auth_schema import RegisterSchema
@@ -13,6 +14,7 @@ from features.auth import auth_blp
 from features.coaching import coach_blp
 from features.admin import admin_blp
 from features.client import client_blp
+from features.workouts import workout_blp
 
 load_dotenv()
 
@@ -58,12 +60,14 @@ app.config.from_object(Config)
 CORS(app)
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 
 #int api
 api = Api(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens never expire for development
 jwt = JWTManager(app)
 
 
@@ -71,6 +75,7 @@ jwt = JWTManager(app)
 api.register_blueprint(auth_blp)
 api.register_blueprint(client_blp)
 api.register_blueprint(coach_blp)
+api.register_blueprint(workout_blp)
 api.register_blueprint(admin_blp)
 
 @app.route('/')

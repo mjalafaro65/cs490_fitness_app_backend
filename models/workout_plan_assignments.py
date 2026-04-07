@@ -20,7 +20,7 @@ class AssignmentStatusEnum(enum.Enum):
 class WorkoutPlanAssignments(db.Model):
     __tablename__ = 'workout_plan_assignments'
 
-    workout_plan_assignment_id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('workout_plans.plan_id'), nullable=False)
     assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     assigned_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)

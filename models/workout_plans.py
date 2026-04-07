@@ -10,5 +10,6 @@ class WorkoutPlans(db.Model):
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text)
     is_public= db.Column(db.Boolean)
+    copied_from_plan_id = db.Column(db.Integer, db.ForeignKey('workout_plans.plan_id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
