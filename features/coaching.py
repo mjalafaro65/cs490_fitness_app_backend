@@ -1,5 +1,5 @@
 from datetime import datetime
-
+from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments
@@ -7,6 +7,7 @@ from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema
+from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
 
 
@@ -168,7 +169,7 @@ class CoachProfileView(MethodView):
         """
         Get coach profile.
         Coach: Calls /coach-profile (gets their own).
-        Admin: Calls /coach-profile?user_id=10 (gets specific user).
+        Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
         curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
@@ -179,15 +180,16 @@ class CoachProfileView(MethodView):
         target_user_id = args.get("user_id") or None
 
         #if target id is provided check if its the logged in user
-        #######need to check if its admin doing the call
+        #######need to check if its admin or client doing the call
         if target_user_id and target_user_id != curr_user_id:
             # Check if curr_id has the 'admin' role
-            is_admin = db.session.query(UserRoles).join(Roles).filter(
+            is_admin_or_client = db.session.query(UserRoles).join(Roles).filter(
                 UserRoles.user_id == curr_auth_id,
-                Roles.name == 'admin'
+                Roles.name == 'admin',
+                Roles.name == 'client',
             ).first()
 
-            if not is_admin:
+            if not is_admin_or_client:
                 abort(403, description="Admin access required to view other profiles.")
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
@@ -445,7 +447,109 @@ class CoachBrowse(MethodView):
             CoachProfiles.bio
         ).join(Users, CoachProfiles.user_id == Users.user_id) \
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
-        .filter(CoachProfiles.status == ApprovalStatusEnum.APPROVED) \
+        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) \
         .all()
 
         return results
+
+
+### Filter for type of coach
+@coach_blp.route("/coachbrowse/filter")
+class CoachBrowseFilter(MethodView):
+    @coach_blp.arguments(CoachBrowsingSchema, location="query")
+    @coach_blp.response(200, CoachBrowsingSchema(many=True))
+    def get(self, args):
+        specialty_id = request.args.get("specialty_id")
+
+        query = db.session.query(
+            CoachProfiles.coach_profile_id,
+            Users.first_name,
+            Users.last_name,
+            Specialties.name.label("specialty_name"),
+            CoachProfiles.years_experience,
+            CoachProfiles.bio
+        ).join(Users, CoachProfiles.user_id == Users.user_id) \
+        .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
+        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) 
+        
+
+        if specialty_id:
+            query = query.filter(CoachProfiles.specialty_id == specialty_id)
+
+        results = query.all()
+        return results
+
+### Coach Recommendation
+### Recommends based on goal type
+""" 
+Goal types are enums and specialty_ids are ints so some jury rigging 
+is required to compare them.
+# Specialty_id
+# 1 = weight
+# 2 = strength
+# 3 = performance
+# 4 = nutrition
+# 5 = mobility
+# 6 = consistency
+# 7 = recovery
+# 8 = custom
+
+# goal_type enums
+weight
+strength
+performance
+nutrition
+mobility
+consistency
+recovery
+custom
+
+"""
+
+
+@coach_blp.route("/coachrecommendations")
+class CoachRecommendations(MethodView):
+    @jwt_required()
+    @coach_blp.response(200, CoachBrowsingSchema(many=True))
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=current_auth_id).scalar()
+        if not curr_user_id:
+            abort(404, description="User not found.")
+        
+        goal_to_specialty_map = {
+            "weight": 1,
+            "strength": 2,
+            "performance": 3,
+            "nutrition": 4,
+            "mobility": 5,
+            "consistency": 6,
+            "recovery": 7,
+            "custom": 8
+        }
+
+        latest_survey = (
+            DailySurvey.query
+            .filter_by(client_id=curr_user_id)
+            .order_by(DailySurvey.date.desc())
+            .first()
+        )
+
+        query = db.session.query(
+            CoachProfiles.coach_profile_id,
+            Users.first_name,
+            Users.last_name,
+            Specialties.name.label("specialty_name"),
+            CoachProfiles.years_experience,
+            CoachProfiles.bio
+        ).join(Users, CoachProfiles.user_id == Users.user_id) \
+         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)
+
+        if latest_survey and latest_survey.goal_type:
+            target_specialty_id = goal_to_specialty_map.get(latest_survey.goal_type.name)
+            
+            if target_specialty_id:
+                query = query.filter(CoachProfiles.specialty_id == target_specialty_id)
+
+        return query.all()
+        
