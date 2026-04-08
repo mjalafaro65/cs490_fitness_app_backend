@@ -15,6 +15,8 @@ from features.coaching import coach_blp
 from features.admin import admin_blp
 from features.client import client_blp
 from features.workouts import workout_blp
+from features.messaging import messaging_blp
+from features.socketio_events import socketio
 
 load_dotenv()
 
@@ -70,6 +72,8 @@ app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens never expire for development
 jwt = JWTManager(app)
 
+# Initialize SocketIO with the app
+socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
 
 #register blueprints
 api.register_blueprint(auth_blp)
@@ -77,6 +81,7 @@ api.register_blueprint(client_blp)
 api.register_blueprint(coach_blp)
 api.register_blueprint(workout_blp)
 api.register_blueprint(admin_blp)
+api.register_blueprint(messaging_blp)
 
 @app.route('/')
 def home():
@@ -238,4 +243,4 @@ if __name__ == "__main__":
     #     # sync model to database before app start
     #     db.create_all() 
     
-    app.run(debug=True)
+    socketio.run(app, debug=True)
