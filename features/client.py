@@ -1,17 +1,17 @@
 from flask import abort, request
 from flask.views import MethodView
 from flask_smorest import Blueprint
-from models import Users
 from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema, ProfileSchema 
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import select
-
+from models import Users
 from models.daily_survey import DailySurvey
 from models import ClientProfiles
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
+
 @client_blp.route("/daily-survey")
 class DailySurveyView(MethodView):
     @jwt_required()
@@ -86,6 +86,7 @@ class ClientProfileView(MethodView):
         current_auth_id = get_jwt_identity()
         
         # find user record linked to Auth ID
+        
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         
         if not user:
@@ -126,3 +127,67 @@ class ClientProfileView(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=f"Database error: {str(e)}")
+
+
+### Delete Daily records 
+@client_blp.route("/delete-daily")
+class DeleteDailyView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, DailySurveySchema)
+    def patch(self):
+        current_auth_id = get_jwt_identity()
+        
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        today = date.today()
+        daily_survey = DailySurvey.query.filter_by(
+            client_id=user.user_id, 
+            date=today
+        ).first()
+        
+        if not daily_survey:
+            abort(404, description="No log found for today to reset.")
+
+        daily_survey.daily_goal = None
+        daily_survey.target_focus = None
+        try:
+            db.session.commit()
+            return daily_survey
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Database error: {str(e)}")
+
+### Edit Daily records
+@client_blp.route("/edit-daily")
+class EditDailyView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(DailySurveySchema)
+    @client_blp.response(200, DailySurveySchema)
+    def patch(self, data):
+        current_auth_id = get_jwt_identity()
+        
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        today = date.today()
+        daily_survey = DailySurvey.query.filter_by(
+            client_id=user.user_id, 
+            date=today
+        ).first()
+        
+        if not daily_survey:
+            abort(404, description="Today's log not found. Create one first.")
+
+        for key, value in data.items():
+            setattr(daily_survey, key, value)
+
+        try:
+            db.session.commit()
+            return daily_survey
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Failed to update the daily log.")
+
