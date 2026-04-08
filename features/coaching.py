@@ -172,8 +172,9 @@ class CoachProfileView(MethodView):
         Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
-        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
-
+        result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
+        curr_user_id = result[0] if result else None
+        
         if not curr_user_id:
             abort(401, description="User not found.")
 
@@ -198,7 +199,7 @@ class CoachProfileView(MethodView):
             profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
 
         if not profile:
-            abort(404, description="Coach profile not found.")
+            return {"message":"Coach profile not found."}, 404
         return profile
     
     @jwt_required()
@@ -263,13 +264,14 @@ class CoachProfileView(MethodView):
             # if  coach tries to change a restricted field, just ignore it
             
             if key == "status":
-                val_upper = value.upper() if isinstance(value, str) else value
+                current_status_upper = profile.status.lower()
+                val_upper = value.lower() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if val_upper == ApprovalStatusEnum.APPROVED:
+                    if val_upper == ApprovalStatusEnum.approved:
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
-                elif val_upper == ApprovalStatusEnum.SWITCHED:
+                elif val_upper == ApprovalStatusEnum.switched or current_status_upper == ApprovalStatusEnum.switched:
                     setattr(profile, key, value)
                 else:
                     continue
@@ -310,7 +312,7 @@ class CoachDocumentView(MethodView):
             .join(Users, CoachProfiles.user_id == Users.user_id)
             .filter(Users.auth_id == curr_auth_id)
         )
-        profile = db.session.execute(stmt).scalar()
+        profile = db.session.execute(stmt).first()
         
         if not profile:
             return {"message": f"No Profile found for AuthID: {curr_auth_id}"}, 404
