@@ -9,6 +9,7 @@ from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema
 from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
+from utils import create_notification
 
 
 
@@ -225,7 +226,12 @@ class CoachProfileView(MethodView):
             profile = CoachProfiles(**data, user_id=curr_user_id, status=ApprovalStatusEnum.pending)
             db.session.add(profile)
 
-            # Notify admin ????
+            create_notification(
+                role_id=3,
+                type_slug="coach-application",
+                title="New Coach Application",
+                body=f"A new profile has been submitted for review by user ID: {curr_user_id}"
+            )
 
             db.session.commit()
             return profile
@@ -277,11 +283,19 @@ class CoachProfileView(MethodView):
                 val_upper = value.upper() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if val_upper == ApprovalStatusEnum.APPROVED:
+                    if val_upper == ApprovalStatusEnum.approved:
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
-                elif val_upper == ApprovalStatusEnum.SWITCHED:
+                        
+                        create_notification(
+                            user_id=profile.user_id,
+                            type_slug="admin-approval",
+                            title="Application Approved!",
+                            body="Congratulations! Your coach profile is now live."
+                        )
+                elif val_upper == ApprovalStatusEnum.switched:
                     setattr(profile, key, value)
+                    
                 else:
                     continue
 
@@ -290,6 +304,12 @@ class CoachProfileView(MethodView):
             elif key in restricted_fields:
                 if is_admin:
                     setattr(profile, key, value)
+                    create_notification(
+                        user_id=profile.user_id,
+                        type_slug="system-alert",
+                        title="Profile Update",
+                        body=f"An administrator has updated your profile status to: {value}."
+                    )
                 else:
                     continue
             #handle general fields (bio, experience, photo, specialty)
