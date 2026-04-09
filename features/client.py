@@ -5,7 +5,7 @@ from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema, ProfileSchema 
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import select
+from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
 from models import ClientProfiles
@@ -33,7 +33,10 @@ class DailySurveyView(MethodView):
         current_user_id=user.user_id
         #make stmt
         #current_user is logged in uses from login_required
-        stmt=select(DailySurvey).filter_by(user_id=current_user_id , date=today)
+        stmt = select(DailySurvey).where(
+        DailySurvey.user_id == current_user_id, 
+        func.date(DailySurvey.date) == today
+        )
 
         #execute 
         entry=db.session.execute(stmt).scalar_one_or_none()
@@ -60,7 +63,7 @@ class DailySurveyView(MethodView):
         today = date.today()
         current_auth_id = get_jwt_identity()
         
-        user = Users.query.filter_by(auth_id=str(current_auth_id)).first()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
         if not user:
             abort(404, description="User not found")
 
@@ -87,12 +90,15 @@ class CheckSurvey(MethodView):
             return {"msg": "User not found"}, 404
 
         # Check for an existing entry for today
-        stmt = select(DailySurvey).filter_by(user_id=user.user_id, date=today)
+        stmt = select(DailySurvey).where(
+        DailySurvey.user_id == user.user_id, 
+        func.date(DailySurvey.date) == today
+        )
         entry = db.session.execute(stmt).scalar_one_or_none()
 
         if entry:
-            
-            if entry.created_at==today:
+                  
+            if entry.updated_at.date() == today==today:
                 return {
                 "completed": True, 
                 "updated:": True,
@@ -102,7 +108,7 @@ class CheckSurvey(MethodView):
             else:
                 return {
                     "completed": True, 
-                    "updated:": False,
+                    "updated": False,
                     "date": today.isoformat(),
                     "survey_id": entry.survey_id
                 }, 200

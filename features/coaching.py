@@ -306,6 +306,7 @@ class CoachProfileView(MethodView):
 
         return profile
 
+
 @coach_blp.route("/coach-profile/documents")
 class CoachDocumentView(MethodView):
     @jwt_required()
