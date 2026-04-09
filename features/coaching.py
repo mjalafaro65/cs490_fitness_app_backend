@@ -6,7 +6,7 @@ from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, C
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, AssignWorkoutPlanSchema, AssignMealPlanSchema
 from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
 
@@ -553,3 +553,76 @@ class CoachRecommendations(MethodView):
 
         return query.all()
         
+@coach_blp.route("/assign-workout/plan")
+class AssignWorkoutPlan(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(AssignWorkoutPlanSchema)
+    @coach_blp.response(200, AssignWorkoutPlanSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        coach_profile = CoachProfiles.query.filter_by(user_id=coach_user.user_id).first()
+        if not coach_profile:
+            abort(403, description="Only registered coaches can assign workout plans.")
+
+        plan_id = data['plan_id']
+        client_id = data['assigned_to_client_id']
+
+        assign = WorkoutPlanAssignments(
+            plan_id=plan_id,
+            assigned_to_client_id=client_id,
+            assigned_by_coach_id=coach_profile.coach_profile_id,
+            repeat_rules=data['repeat_rules'],
+            status=data['status'],
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            created_at=datetime.utcnow()
+        )
+
+        try:
+            db.session.add(assign)
+            db.session.commit()
+            return assign
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Failed to assign workout plan.")
+
+@coach_blp.route("/assign-meal/plan")
+class AssignMealPlan(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(AssignMealPlanSchema)
+    @coach_blp.response(200, AssignMealPlanSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        coach_profile = CoachProfiles.query.filter_by(user_id=coach_user.user_id).first()
+        if not coach_profile:
+            abort(403, description="Only registered coaches can assign meal plans.")
+
+        plan_id = data['meal_plan_id']
+        client_id = data['user_id']
+
+        assign = MealPlanAssignments(
+            meal_plan_id=plan_id,
+            user_id=client_id,
+            assigned_by_user_id=coach_profile.coach_profile_id,
+            repeat_rule=data['repeat_rule'],
+            status=data['status'],
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            created_at=datetime.utcnow()
+        )
+
+        try:
+            db.session.add(assign)
+            db.session.commit()
+            return assign
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Failed to assign meal plan.")
+
+
+        
+            

@@ -73,4 +73,23 @@ class CoachBrowsingSchema(Schema):
 #class CoachFiltering(Schema):
 #    pass
 
-   
+class AssignWorkoutPlanSchema(Schema):
+    plan_id = fields.Int(required=True)
+    assigned_to_client_id = fields.Int(required=True)
+    assigned_by_coach_id = fields.Int(dump_only=True)  
+    assignment_date = fields.Date(dump_only=True)
+    start_date = fields.Date()
+    end_date = fields.Date()
+    repeat_rules = fields.Str(validate=validate.OneOf(['none', 'daily', 'weekly', 'monthly']), required=True)
+    status = fields.Str(validate=validate.OneOf(['active', 'completed', 'cancelled']), required=True)
+    created_at = fields.DateTime(dump_only=True)
+
+class AssignMealPlanSchema(Schema):
+    meal_plan_id = fields.Int(required=True)
+    user_id = fields.Int(required=True)
+    assigned_by_user_id = fields.Int(dump_only=True)  
+    start_date = fields.Date()
+    end_date = fields.Date()
+    repeat_rule = fields.Str(validate=validate.OneOf(['none', 'daily', 'weekly', 'biweekly', 'monthly']), required=True)
+    status = fields.Str(validate=validate.OneOf(['active', 'completed', 'canceled']), required=True)
+    created_at = fields.DateTime(dump_only=True)

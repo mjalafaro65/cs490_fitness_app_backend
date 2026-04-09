@@ -28,3 +28,12 @@ class ProfileSchema(Schema):
     
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+class ReviewCoachSchema(Schema):
+    ### For editing reviews
+    review_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+    ### For creating reviews
+    rating = fields.Int(required=True, validate=validate.Range(min=1, max=100))
+    comment = fields.Str(validate=validate.Length(max=1000))
+
