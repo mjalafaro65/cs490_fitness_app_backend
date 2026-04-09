@@ -28,7 +28,7 @@ class DailySurveyView(MethodView):
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         if not user:
-            return {"msg":"user not found"},404
+            abort(404, description="user not found")
         
         current_user_id=user.user_id
         #make stmt
@@ -52,7 +52,6 @@ class DailySurveyView(MethodView):
         return entry
     
     @jwt_required()
-    @client_blp.response(200,DailySurveySchema)
     def get(self):
         """
         Check if the user has already submitted a survey today.
@@ -69,11 +68,18 @@ class DailySurveyView(MethodView):
         entry = db.session.execute(stmt).scalar_one_or_none()
 
         if entry:
-            entry.completed=True
-            return entry
-        else:
-            return {"msg": "No survey found for today.", "completed": False}, 200
+            
+            return {
+                "completed": True, 
+                "date": today.isoformat(),
+                "survey_id": entry.survey_id
+            }, 200
         
+        return {"completed": False}, 200
+     
+     
+@client_blp.route("/profile")
+class ClientProfileView(MethodView):        
     @jwt_required()
     @client_blp.response(200, ProfileSchema)
     def get(self):
