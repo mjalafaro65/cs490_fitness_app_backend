@@ -98,7 +98,7 @@ class CheckSurvey(MethodView):
 
         if entry:
                   
-            if entry.updated_at.date() == today==today:
+            if entry.updated_at.date() == today and  entry.updated_at != entry.created_at:
                 return {
                 "completed": True, 
                 "updated:": True,

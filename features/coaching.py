@@ -344,7 +344,7 @@ class CoachDocumentView(MethodView):
             .join(Users, CoachProfiles.user_id == Users.user_id)
             .filter(Users.auth_id == curr_auth_id)
         )
-        profile = db.session.execute(stmt).first()
+        profile = db.session.execute(stmt).scalar_one_or_none()
         
         if not profile:
             abort(404, message=f"No Profile found for AuthID: {curr_auth_id}")

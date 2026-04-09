@@ -58,6 +58,7 @@ class UserSetup(MethodView):
         current_auth_id=get_jwt_identity()
 
         #not client 
+        print(current_auth_id)
         auth_rol_re=UserRoles.query.filter_by(user_id=current_auth_id, role_id=1).first()
 
         if not auth_rol_re:
@@ -66,6 +67,7 @@ class UserSetup(MethodView):
         
         #handle users table
         existing_user=Users.query.filter_by(auth_id=current_auth_id).first()
+                                        
 
         if existing_user: 
             return {"msg":"Client profile exists"},400
@@ -79,14 +81,14 @@ class UserSetup(MethodView):
         try:
             #create user table, dont commit
             user=Users(auth_id=current_auth_id,**user_info)
+                
             db.session.add(user)
             db.session.flush()
                 
-
+             
             client_pf=ClientProfiles(client_id=user.user_id, **data)
 
             db.session.add(client_pf)
-        
             db.session.commit()
             return {"msg": "Setup successful", "auth_id": user.user_id}, 201 
     
