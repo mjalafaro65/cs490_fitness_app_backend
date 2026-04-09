@@ -67,7 +67,7 @@ class UserSetup(MethodView):
         #handle users table
         existing_user=Users.query.filter_by(auth_id=current_auth_id).first()
 
-        if  existing_user: 
+        if existing_user: 
             return {"msg":"Client profile exists"},400
             
         user_info = {

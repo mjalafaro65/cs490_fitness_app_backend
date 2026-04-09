@@ -1,6 +1,7 @@
 from marshmallow import Schema, fields, validate
 
 class DailySurveySchema(Schema):
+    survey_id = fields.Int(dump_only=True)
     daily_goal = fields.Str(required=False, allow_none=True)
     energy_level = fields.Int(required=False, allow_none=True)
     target_focus = fields.Str(required=False, allow_none=True)
@@ -23,6 +24,7 @@ class ProfileSchema(Schema):
     )
     
     bio = fields.Str(validate=validate.Length(max=500))
+    profile_photo=fields.Str(required=False)
     height = fields.Float(validate=validate.Range(min=0))
     weight = fields.Float(validate=validate.Range(min=0))
     

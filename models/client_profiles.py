@@ -6,7 +6,7 @@ class gender_enum(enum.Enum):
     male = "male"
     female = "female"
     other = "other"
-    prefer_not = "prefer_not_to_say"
+    prefer_not_to_say = "prefer_not_to_say"
 
 class ClientProfiles(db.Model):
     __tablename__ = "client_profiles"

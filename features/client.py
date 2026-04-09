@@ -28,7 +28,7 @@ class DailySurveyView(MethodView):
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         if not user:
-            return {"msg":"user not found"},404
+            abort(404, description="user not found")
         
         current_user_id=user.user_id
         #make stmt
@@ -50,7 +50,30 @@ class DailySurveyView(MethodView):
 
         db.session.commit()
         return entry
+
+    @jwt_required()
+    @client_blp.response(200, DailySurveySchema)
+    def get(self):
+        """
+        Fetch today's survey data using the full DailySurveySchema.
+        """
+        today = date.today()
+        current_auth_id = get_jwt_identity()
+        
+        user = Users.query.filter_by(auth_id=str(current_auth_id)).first()
+        if not user:
+            abort(404, description="User not found")
+
+       
+        entry = DailySurvey.query.filter_by(user_id=user.user_id, date=today).first()
+
+        if not entry:
+            abort(404, description="No survey submitted for today.")
+
+        return entry
     
+@client_blp.route("/survey-status")
+class CheckSurvey(MethodView):  
     @jwt_required()
     def get(self):
         """
@@ -68,17 +91,26 @@ class DailySurveyView(MethodView):
         entry = db.session.execute(stmt).scalar_one_or_none()
 
         if entry:
-            # You can return the data or just a simple boolean
-            return {
+            
+            if entry.created_at==today:
+                return {
                 "completed": True, 
+                "updated:": True,
                 "date": today.isoformat(),
                 "survey_id": entry.survey_id
-            }, 200
+                }, 200
+            else:
+                return {
+                    "completed": True, 
+                    "updated:": False,
+                    "date": today.isoformat(),
+                    "survey_id": entry.survey_id
+                }, 200
         
-        return {"completed": False}, 200
-
+        return {"completed": False}, 200    
+          
 @client_blp.route("/profile")
-class ClientProfileView(MethodView):
+class ClientProfileView(MethodView):        
     @jwt_required()
     @client_blp.response(200, ProfileSchema)
     def get(self):
@@ -90,13 +122,13 @@ class ClientProfileView(MethodView):
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         
         if not user:
-            abort(404, description="User record not found.")
+            return {"msg":"User record not found."}, 404
 
         # use user.user_id to find the profile
         profile = ClientProfiles.query.filter_by(client_id=user.user_id).first()
         
         if not profile:
-            abort(404, description="Profile not found. Please complete setup.")
+            return {"msg":"Profile not found. Please complete setup."}, 404
             
         return profile
 
