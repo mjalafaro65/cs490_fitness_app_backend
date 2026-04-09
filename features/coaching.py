@@ -9,7 +9,7 @@ from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema
 from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
-from utils import create_notification
+from .utils import create_notification
 
 
 

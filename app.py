@@ -29,12 +29,12 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     #Connection arguments
-    # SQLALCHEMY_ENGINE_OPTIONS = {
-    #     "connect_args": {
-    #         "ssl_ca": ca_path,
-    #         "ssl_verify_cert": True
-    #     }
-    # }
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {
+            "ssl_ca": ca_path,
+            "ssl_verify_cert": True
+        }
+    }
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
