@@ -50,7 +50,30 @@ class DailySurveyView(MethodView):
 
         db.session.commit()
         return entry
+
+    @jwt_required()
+    @client_blp.response(200, DailySurveySchema)
+    def get(self):
+        """
+        Fetch today's survey data using the full DailySurveySchema.
+        """
+        today = date.today()
+        current_auth_id = get_jwt_identity()
+        
+        user = Users.query.filter_by(auth_id=str(current_auth_id)).first()
+        if not user:
+            abort(404, description="User not found")
+
+       
+        entry = DailySurvey.query.filter_by(user_id=user.user_id, date=today).first()
+
+        if not entry:
+            abort(404, description="No survey submitted for today.")
+
+        return entry
     
+@client_blp.route("/survey-status")
+class CheckSurvey(MethodView):  
     @jwt_required()
     def get(self):
         """
@@ -69,15 +92,23 @@ class DailySurveyView(MethodView):
 
         if entry:
             
-            return {
+            if entry.created_at==today:
+                return {
                 "completed": True, 
+                "updated:": True,
                 "date": today.isoformat(),
                 "survey_id": entry.survey_id
-            }, 200
+                }, 200
+            else:
+                return {
+                    "completed": True, 
+                    "updated:": False,
+                    "date": today.isoformat(),
+                    "survey_id": entry.survey_id
+                }, 200
         
-        return {"completed": False}, 200
-     
-     
+        return {"completed": False}, 200    
+          
 @client_blp.route("/profile")
 class ClientProfileView(MethodView):        
     @jwt_required()

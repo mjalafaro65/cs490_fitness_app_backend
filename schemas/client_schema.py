@@ -1,6 +1,7 @@
 from marshmallow import Schema, fields, validate
 
 class DailySurveySchema(Schema):
+    survey_id = fields.Int(dump_only=True)
     daily_goal = fields.Str(required=False, allow_none=True)
     energy_level = fields.Int(required=False, allow_none=True)
     target_focus = fields.Str(required=False, allow_none=True)
