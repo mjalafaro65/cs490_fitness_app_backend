@@ -13,3 +13,7 @@ class Exercises(db.Model):
     description = db.Column(db.Text)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # NULL creator = catalog / default exercise; set for user-created moves
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=True)
+    # Published custom exercises appear alongside defaults in the shared catalog
+    is_public = db.Column(db.Boolean, default=False, nullable=False)

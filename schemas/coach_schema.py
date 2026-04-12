@@ -34,6 +34,7 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
         name = "CoachProfileData"
 
     user_id = fields.Int(dump_only=True)
+    
     coach_profile_id = fields.Int(dump_only=True)
     is_flagged = fields.Bool(dump_only=True)
     approved_by_admin_user_id = fields.Int(dump_only=True)
@@ -47,7 +48,7 @@ class CoachProfileQuerySchema(Schema):
     user_id = fields.Int()
 
 class CoachDocumentSchema(Schema):
-    document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'ID', 'Insurance']))
+    document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'ID', 'Other']))
     document_url = fields.Str(required=True)
     
     # These are for the Database/Response only
@@ -61,6 +62,10 @@ class CoachDocumentSchema(Schema):
         include_fk = True
         
 
+class SpecialtySchema(Schema):
+    specialty_id = fields.Int(dump_only=True)
+    name = fields.Str(required=True)
+
 class CoachBrowsingSchema(Schema):
     coach_profile_id = fields.Int(dump_only=True)
     first_name = fields.Str(dump_only=True)
@@ -68,6 +73,7 @@ class CoachBrowsingSchema(Schema):
     specialty_name = fields.Str(dump_only=True)
     years_experience = fields.Int(dump_only=True)
     bio = fields.Str(dump_only=True)
+
 
 
 #class CoachFiltering(Schema):
