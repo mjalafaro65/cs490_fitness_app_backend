@@ -7,6 +7,7 @@ class WorkoutPlans(db.Model):
 
     plan_id = db.Column(db.Integer, primary_key=True)
     owner_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text)
     is_public= db.Column(db.Boolean)

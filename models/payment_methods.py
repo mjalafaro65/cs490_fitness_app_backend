@@ -7,6 +7,7 @@ class PaymentMethods(db.Model):
     
     payment_method_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     provider = db.Column(db.String(60), nullable=False)
     token = db.Column(db.String(255), nullable=False)
     last4 = db.Column(db.String(4), nullable=False)

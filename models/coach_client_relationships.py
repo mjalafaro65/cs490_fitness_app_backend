@@ -15,6 +15,8 @@ class CoachClientRelationships(db.Model):
     relationship_id = db.Column(db.Integer, primary_key=True)
     coach_profile_id = db.Column(db.Integer, db.ForeignKey("coach_profiles.coach_profile_id"), nullable=False)
     client_user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
+    
     payment_plan_id = db.Column(db.Integer, db.ForeignKey("payment_plans.payment_plan_id"), nullable=False)
     status = db.Column(db.Enum(status_enum), default=status_enum.active)
     term_reason = db.Column(db.String(255))
