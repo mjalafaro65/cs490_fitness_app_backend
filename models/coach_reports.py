@@ -14,7 +14,7 @@ class CoachReports(db.Model):
     report_id = db.Column(db.Integer, primary_key=True)
     coach_profile_id = db.Column(db.Integer, db.ForeignKey('coach_profiles.coach_profile_id'), nullable=False)
     reported_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     reason = db.Column(db.Text, nullable=False)
     status = db.Column(db.Enum(StatusEnum), nullable=False, default=StatusEnum.pending)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

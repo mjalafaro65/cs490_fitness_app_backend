@@ -2,13 +2,13 @@ from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, CoachReviews
 from db import db
 from datetime import date, datetime, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
-from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema
+from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_documents import StatusEnum
 

@@ -7,7 +7,7 @@ class DailySurvey(db.Model):
 
     survey_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     date = db.Column(db.Date, default=date.today, nullable=False)
 
     daily_goal= db.Column(db.String(45), nullable=True)

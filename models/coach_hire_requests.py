@@ -12,7 +12,7 @@ class CoachHireRequests(db.Model):
 
     request_id = db.Column(db.Integer, primary_key=True)
     client_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     coach_profile_id = db.Column(db.Integer, db.ForeignKey('coach_profiles.coach_profile_id'), nullable=False)
     payment_plan_id = db.Column(db.Integer, db.ForeignKey('payment_plans.payment_plan_id'), nullable=True)
     status = db.Column(db.Enum(StatusEnum), nullable=False)

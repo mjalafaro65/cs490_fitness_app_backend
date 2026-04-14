@@ -12,6 +12,6 @@ class ReviewInteractions(db.Model):
     interaction_id = db.Column(db.Integer, primary_key=True)
     review_id = db.Column(db.Integer, db.ForeignKey('coach_reviews.review_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     interaction_type = db.Column(db.Enum(InteractionType))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

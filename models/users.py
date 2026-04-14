@@ -10,7 +10,7 @@ class Users(db.Model):
 
     ### Cascade to delete all related data when a user is purged.
     auth = db.relationship(
-        "UserAuth", 
+        "UserAuths", 
         backref="user", 
         cascade="all, delete-orphan", 
         single_parent=True
@@ -25,6 +25,7 @@ class Users(db.Model):
     )
     coach_client_relationships = db.relationship(
         "CoachClientRelationships",
+        foreign_keys="CoachClientRelationships.client_user_id",
         cascade="all, delete-orphan"
     )
     coach_hire_requests = db.relationship(
@@ -33,6 +34,7 @@ class Users(db.Model):
     )
     coach_profiles = db.relationship(
         "CoachProfiles",
+        foreign_keys="CoachProfiles.user_id",
         cascade="all, delete-orphan"
     )
     coach_reports = db.relationship(
@@ -49,6 +51,7 @@ class Users(db.Model):
     )
     goals = db.relationship(
         "Goals",
+        foreign_keys="Goals.for_user_id",
         cascade="all, delete-orphan"
     )
     meal_logs = db.relationship(
@@ -57,6 +60,7 @@ class Users(db.Model):
     )
     meal_plan_assignments = db.relationship(
         "MealPlanAssignments",
+        foreign_keys="MealPlanAssignments.user_id",
         cascade="all, delete-orphan"
     )
     meal_plans = db.relationship(
@@ -81,6 +85,7 @@ class Users(db.Model):
     )
     refund_disputes = db.relationship(
         "RefundDisputes",
+        foreign_keys="RefundDisputes.opened_by_user_id",
         cascade="all, delete-orphan"
     )
     review_flags = db.relationship(
