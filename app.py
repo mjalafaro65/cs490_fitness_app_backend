@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from flask_smorest import Api, Blueprint
 from flask_jwt_extended import JWTManager, get_jwt_identity, jwt_required
+from flask_migrate import Migrate
 from db import db  # This replaces your 'db = SQLAlchemy(app)' line later
 from middleware import roles_required
 from schemas.auth_schema import RegisterSchema
@@ -13,6 +14,10 @@ from features.auth import auth_blp
 from features.coaching import coach_blp
 from features.admin import admin_blp
 from features.client import client_blp
+from features.workouts import workout_blp
+from features.notifications import notif_blp
+from features.messaging import messaging_blp
+from features.socketio_events import socketio
 
 load_dotenv()
 
@@ -24,12 +29,12 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     #Connection arguments
-    # SQLALCHEMY_ENGINE_OPTIONS = {
-    #     "connect_args": {
-    #         "ssl_ca": ca_path,
-    #         "ssl_verify_cert": True
-    #     }
-    # }
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {
+            "ssl_ca": ca_path,
+            "ssl_verify_cert": True
+        }
+    }
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
@@ -58,20 +63,27 @@ app.config.from_object(Config)
 CORS(app)
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 
 #int api
 api = Api(app)
 
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "dev-secret-key") 
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens never expire for development
 jwt = JWTManager(app)
 
+# Initialize SocketIO with the app
+socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
 
 #register blueprints
 api.register_blueprint(auth_blp)
 api.register_blueprint(client_blp)
 api.register_blueprint(coach_blp)
+api.register_blueprint(workout_blp)
 api.register_blueprint(admin_blp)
+api.register_blueprint(notif_blp)
+api.register_blueprint(messaging_blp)
 
 @app.route('/')
 def home():
@@ -233,4 +245,4 @@ if __name__ == "__main__":
     #     # sync model to database before app start
     #     db.create_all() 
     
-    app.run(debug=True)
+    socketio.run(app, debug=True)

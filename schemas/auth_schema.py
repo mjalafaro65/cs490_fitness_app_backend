@@ -17,7 +17,7 @@ class UserSetupSchema(Schema):
     gender = fields.Str(
         required=False, 
         allow_none=True,
-        validate=validate.OneOf(['male', 'female', 'other',"prefer_not_to_say"])
+        validate=validate.OneOf(['male', 'female', 'other','prefer_not_to_say'])
     )
     height = fields.Float(required=False, allow_none=True)
     weight = fields.Float(required=False, allow_none=True)

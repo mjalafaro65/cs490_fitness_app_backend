@@ -2,13 +2,14 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, AssignWorkoutPlanSchema, AssignMealPlanSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema
 from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
+from .utils import create_notification
 
 
 
@@ -134,7 +135,7 @@ class TopCoach(MethodView):
 #             db.session.rollback()
 #             abort(500, description=f"Database error during update: {str(e)}")
 
-@coach_blp.route("/init-specialties")
+@coach_blp.route("/specialties")
 class InitSpecialties(MethodView):
     def post(self):
         """Initialize specialties in the database."""
@@ -159,7 +160,14 @@ class InitSpecialties(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=f"Failed to initialize specialties: {str(e)}")
-            
+
+    @coach_blp.response(200, SpecialtySchema(many=True))
+    def get (sef):
+        """Get all specialties"""
+        specialties=db.session.execute(select(Specialties)).scalars().all()
+
+        return specialties
+
 @coach_blp.route("/coach-profile")
 class CoachProfileView(MethodView):
     @jwt_required()
@@ -172,8 +180,9 @@ class CoachProfileView(MethodView):
         Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
-        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
-
+        result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
+        curr_user_id = result[0] if result else None
+        
         if not curr_user_id:
             abort(401, description="User not found.")
 
@@ -198,11 +207,11 @@ class CoachProfileView(MethodView):
             profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
 
         if not profile:
-            abort(404, description="Coach profile not found.")
+            return {"message":"Coach profile not found."}, 404
         return profile
     
     @jwt_required()
-    @coach_blp.arguments(CoachProfileSchema(load_instance=False))
+    @coach_blp.arguments(CoachProfileSchema(load_instance=False, exclude=("status",)))
     @coach_blp.response(201, CoachProfileSchema)
     def post(self,data):
         """
@@ -212,16 +221,25 @@ class CoachProfileView(MethodView):
         curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
 
         if CoachProfiles.query.filter_by(user_id=curr_user_id).first():
+           abort(400, message="A profile already exists for this user.")
+        
+        try:
+            profile = CoachProfiles(**data, user_id=curr_user_id, status=ApprovalStatusEnum.pending)
+            db.session.add(profile)
 
-            abort(400, description="A profile already exists for this user.")
+            create_notification(
+                role_id=3,
+                type_slug="coach-application",
+                title="New Coach Application",
+                body=f"A new profile has been submitted for review by user ID: {curr_user_id}"
+            )
 
-        profile = CoachProfiles(**data, user_id=curr_user_id)
-        db.session.add(profile)
-
-        # Optional: Notify admin ????
-
-        db.session.commit()
-        return profile
+            db.session.commit()
+            return profile
+        except Exception as e:
+            db.session.rollback()
+            print(f"DEBUG: Database Error: {str(e)}") 
+            abort(500, message="Database error occurred during profile creation.") 
     
     @jwt_required()
     @coach_blp.arguments(CoachProfileSchema(partial=True,load_instance=False))
@@ -263,14 +281,23 @@ class CoachProfileView(MethodView):
             # if  coach tries to change a restricted field, just ignore it
             
             if key == "status":
-                val_upper = value.upper() if isinstance(value, str) else value
+                current_status_upper = profile.status.lower()
+                val_upper = value.lower() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if val_upper == ApprovalStatusEnum.APPROVED:
+                    if val_upper == ApprovalStatusEnum.approved:
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
-                elif val_upper == ApprovalStatusEnum.SWITCHED:
+                        
+                        create_notification(
+                            user_id=profile.user_id,
+                            type_slug="admin-approval",
+                            title="Application Approved!",
+                            body="Congratulations! Your coach profile is now live."
+                        )
+                elif val_upper == ApprovalStatusEnum.switched or current_status_upper == ApprovalStatusEnum.switched:
                     setattr(profile, key, value)
+                    
                 else:
                     continue
 
@@ -279,6 +306,12 @@ class CoachProfileView(MethodView):
             elif key in restricted_fields:
                 if is_admin:
                     setattr(profile, key, value)
+                    create_notification(
+                        user_id=profile.user_id,
+                        type_slug="system-alert",
+                        title="Profile Update",
+                        body=f"An administrator has updated your profile status to: {value}."
+                    )
                 else:
                     continue
             #handle general fields (bio, experience, photo, specialty)
@@ -293,12 +326,13 @@ class CoachProfileView(MethodView):
 
         return profile
 
+
 @coach_blp.route("/coach-profile/documents")
 class CoachDocumentView(MethodView):
     @jwt_required()
-    @coach_blp.arguments(CoachDocumentSchema)
-    @coach_blp.response(201, CoachDocumentSchema)
-    def post(self, document_obj):
+    @coach_blp.arguments(CoachDocumentSchema(many=True))
+    # @coach_blp.response(201, CoachDocumentSchema(many=True))
+    def post(self, data):
         """
         Post coach document 
         """
@@ -310,20 +344,22 @@ class CoachDocumentView(MethodView):
             .join(Users, CoachProfiles.user_id == Users.user_id)
             .filter(Users.auth_id == curr_auth_id)
         )
-        profile = db.session.execute(stmt).scalar()
+        profile = db.session.execute(stmt).scalar_one_or_none()
         
         if not profile:
-            return {"message": f"No Profile found for AuthID: {curr_auth_id}"}, 404
+            abort(404, message=f"No Profile found for AuthID: {curr_auth_id}")
         
-        new_doc = CoachDocuments(
-            document_type=document_obj['document_type'],
-            document_url=document_obj['document_url'],
-            coach_profile_id=profile.coach_profile_id
-        )
-                
-        db.session.add(new_doc)
-        db.session.commit()
-        return new_doc
+        for doc in data:
+            new_doc = CoachDocuments(
+                document_type=doc['document_type'],
+                document_url=doc['document_url'],
+                coach_profile_id=profile.coach_profile_id
+            )
+            db.session.add(new_doc)
+        
+        db.session.commit()  
+
+        return {"message":"Documents uploaded successfully"},200
     
     @jwt_required()
     @coach_blp.response(200, CoachDocumentSchema(many=True))
