@@ -12,6 +12,7 @@ class ClientProfiles(db.Model):
     __tablename__ = "client_profiles"
     client_profile_id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer,db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     date_of_birth = db.Column(db.Date, nullable=True)
     gender = db.Column(db.Enum(gender_enum), nullable=True)
     profile_photo = db.Column(db.String(255), nullable=True)

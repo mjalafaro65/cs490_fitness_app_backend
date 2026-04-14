@@ -14,6 +14,7 @@ class Payments(db.Model):
     payment_id = db.Column(db.Integer, primary_key=True)
     invoice_id = db.Column(db.Integer, db.ForeignKey('invoices.invoice_id'), nullable=False)
     payer_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     amount = db.Column(db.Numeric(10,2), nullable=False)
     status = db.Column(db.Enum(StatusEnum), nullable=False)
     is_auto_payment = db.Column(db.Boolean, default=False)

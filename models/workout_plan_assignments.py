@@ -24,6 +24,7 @@ class WorkoutPlanAssignments(db.Model):
     plan_id = db.Column(db.Integer, db.ForeignKey('workout_plans.plan_id'), nullable=False)
     assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     assigned_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     assignment_type = db.Column(db.Enum(AssignmentTypeEnum), nullable=False)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)

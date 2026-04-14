@@ -7,6 +7,7 @@ class ClientPaymentPlanOverrides(db.Model):
     override_id = db.Column(db.Integer, primary_key=True)
     payment_plan_id = db.Column(db.Integer, db.ForeignKey('payment_plans.payment_plan_id'),nullable=False)
     client_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     custom_amount = db.Column(db.Numeric(10, 2), nullable=False)
     ### 0 = Monthly
     ### 1 = Yearly

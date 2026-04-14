@@ -15,3 +15,6 @@ class AdminCheckReviewsSchema(Schema):
     is_visible = fields.Bool()
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+class AdminPurgeUserSchema(Schema):
+    user_id = fields.Int(required=True)

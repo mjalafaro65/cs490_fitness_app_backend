@@ -20,6 +20,7 @@ class Goals(db.Model):
     goal_id = db.Column(db.Integer, primary_key=True)
     for_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     goal_type = db.Column(db.Enum(GoalType), nullable=False)
     title = db.Column(db.String(120), nullable=False)
     target_value = db.Column(db.Numeric(10,2))
