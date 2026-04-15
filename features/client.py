@@ -3,12 +3,12 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
-from schemas.client_schema import DailySurveySchema, ProfileSchema, ReviewCoachSchema
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
-from models import ClientProfiles, CoachReviews
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -229,6 +229,162 @@ class EditDailyView(MethodView):
             db.session.rollback()
             abort(500, description="Failed to update the daily log.")
 
+
+@client_blp.route("/coach-hire")
+@jwt_required()
+def test():
+    return "Sweet Potato"
+
+
+
+@client_blp.route("/hire-request")
+class ClientHireRequestCreateView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(HireRequestCreateSchema)
+    @client_blp.response(201, HireRequestStatusSchema)
+    def post(self, data):
+        current_user_id = get_jwt_identity()
+        
+        coach_profile_id = data["coach_profile_id"]
+        payment_plan_id = data["payment_plan_id"]
+        auto_pay_enabled = data.get("auto_pay_enabled", False)
+
+        print(f"DEBUG: Processing request for User {current_user_id} -> Coach {coach_profile_id}")
+
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(
+                CoachProfiles.coach_profile_id == coach_profile_id
+            )
+        ).scalar_one_or_none()
+
+        if not coach_profile:
+            abort(404, description="Coach profile not found")
+
+        status_str = str(coach_profile.status).lower()
+        if "approved" not in status_str:
+            print(f"FAILED: Coach status is '{status_str}'")
+            abort(400, description="Coach is not available")
+
+        payment_plan = db.session.execute(
+            select(PaymentPlans).where(
+                PaymentPlans.payment_plan_id == payment_plan_id
+            )
+        ).scalar_one_or_none()
+
+        if not payment_plan:
+            abort(404, description="Payment plan not found")
+
+        if payment_plan.coach_profile_id != coach_profile_id:
+            abort(400, description="Invalid payment plan for this coach")
+
+        existing_pending = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.client_user_id == current_user_id,
+                CoachHireRequests.coach_profile_id == coach_profile_id,
+                CoachHireRequests.status == "pending"
+            )
+        ).scalar_one_or_none()
+
+        if existing_pending:
+            abort(409, description="Pending request already exists")
+
+        new_request = CoachHireRequests(
+            client_user_id=current_user_id,
+            coach_profile_id=coach_profile_id,
+            payment_plan_id=payment_plan_id,
+            status="pending",
+            auto_pay_enabled=auto_pay_enabled
+        )
+
+        try:
+            db.session.add(new_request)
+            db.session.commit()
+            db.session.refresh(new_request) 
+            print(f"SUCCESS: Created Request ID {new_request.request_id}")
+            return new_request
+        except Exception as e:
+            db.session.rollback()
+            print(f"DATABASE ERROR: {str(e)}")
+            abort(500, description="Internal database error")
+
+
+
+
+@client_blp.route("/hire-request/<int:request_id>")
+class ClientHireRequestDetailView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, HireRequestStatusSchema)
+    def delete(self, request_id):
+        current_user_id = get_jwt_identity()
+
+        hire_request = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.request_id == request_id
+            )
+        ).scalar_one_or_none()
+
+        if not hire_request:
+            abort(404, description="Hire request not found")
+
+        if int(hire_request.client_user_id) != int(current_user_id):
+            abort(403, description="Not your request")
+
+        current_status_str = str(hire_request.status).lower()
+
+        if "pending" not in current_status_str:
+            abort(400, description=f"Only pending requests can be canceled. Current: {current_status_str}")
+
+        try:
+            hire_request.status = "canceled"
+            
+            db.session.commit()
+            print(f"SUCCESS: Request {request_id} set to canceled")
+            return hire_request
+        except Exception as e:
+            db.session.rollback()
+            print(f"COMMIT ERROR: {str(e)}")
+            abort(500, description="Could not update status.")
+    
+
+
+@client_blp.route("/hire-requests")
+class ClientHireRequestListView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, HireRequestListSchema(many=True))
+    def get(self):
+        current_user_id = get_jwt_identity()
+
+        requests = db.session.execute(
+            select(CoachHireRequests)
+            .where(CoachHireRequests.client_user_id == current_user_id)
+            .order_by(CoachHireRequests.created_at.desc())
+        ).scalars().all()
+
+        return requests
+    
+
+
+
+@client_blp.route("/hire-request/<int:request_id>/status")
+class ClientHireRequestStatusView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, HireRequestStatusSchema)
+    def get(self, request_id):
+        current_user_id = get_jwt_identity()
+
+        hire_request = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.request_id == request_id
+            )
+        ).scalar_one_or_none()
+
+        if not hire_request:
+            abort(404, description="Hire request not found")
+
+        if int(hire_request.client_user_id) != int(current_user_id):
+            abort(403, description="Not allowed")
+
+        return hire_request
 ### Client Reviews Coach
 @client_blp.route("/review-coach/<int:coach_id>")
 class ReviewCoachView(MethodView):
