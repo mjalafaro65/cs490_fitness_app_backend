@@ -30,6 +30,7 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
         model = CoachProfiles
         load_instance = True
         include_fk = True
+        exclude = ("specialty_id",)
         sqla_session = db.session
         name = "CoachProfileData"
 
@@ -43,6 +44,8 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
     flagged_at = fields.DateTime(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+    
+    specialty_name = fields.String(attribute="specialty.name", dump_only=True)
     
 
 class CoachProfileQuerySchema(Schema):

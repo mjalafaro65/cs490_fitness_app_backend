@@ -11,7 +11,7 @@ class CoachReviews(db.Model):
     #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     rating = db.Column(db.Integer, CheckConstraint('rating >= 1 AND rating <= 100'), nullable=False)
     comment = db.Column(db.Text, nullable=True)
-    is_anon = db.Column(db.Boolean, default=False, nullable=False)
+    is_anonymous = db.Column(db.Boolean, default=False, nullable=False)
     is_flagged = db.Column(db.Boolean, default=False, nullable=False)
     is_visible = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

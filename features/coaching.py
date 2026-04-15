@@ -2,11 +2,13 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema
+from schemas.client_schema import ReviewCoachSchema
+
 from schemas.client_schema import DailySurveySchema
 from models.coach_profiles import ApprovalStatusEnum
 from .utils import create_notification
@@ -653,7 +655,13 @@ class AssignMealPlan(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description="Failed to assign meal plan.")
+  
+@coach_blp.route("/<int:coach_id>/reviews")       
+class CoachReviewsPublic(MethodView):
 
-
-        
+    @coach_blp.response(200, ReviewCoachSchema(many=True))
+    def get(self, coach_id):
+        return CoachReviews.query.filter_by(
+            coach_profile_id=coach_id
+        ).all()
             
