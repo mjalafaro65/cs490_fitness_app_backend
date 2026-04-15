@@ -137,24 +137,9 @@ class UserMe(MethodView):
             "roles": roles,
             "msg": "Token is valid and middleware is active"
         }, 200
-    
-    @jwt_required()
-    def delete(self):
-        """
-        Deletes the current user's account based on JWT identity
-        """
-        current_auth_id=get_jwt_identity()
+           
 
-        user_auth=UserAuths.query.get_or_404(current_auth_id)
-
-        try:
-            db.session.delete(user_auth)
-            db.session.commit()
-            return {"msg": "Account successfully deleted"}, 200
-        except:
-            db.session.rollback()
-            abort(500, description="Could not delete account")
-
+   
 
 @auth_blp.route("/promote/<int:auth_id>")
 class AdminPromote(MethodView):

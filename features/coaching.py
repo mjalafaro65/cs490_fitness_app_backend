@@ -2,7 +2,7 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
@@ -122,7 +122,8 @@ class TopCoach(MethodView):
         
 #         # Refactored: No longer creates profile; only updates.
 #         if not profile:
-#             abort(400, description="Coach profile not found. Use /auth/setup to create your profile.")
+#             abort(400, description="Coach profile not found. Use /auth
+# to create your profile.")
 
 #         # Update fields dynamically
 #         for key, value in data.items():
@@ -190,16 +191,8 @@ class CoachProfileView(MethodView):
 
         #if target id is provided check if its the logged in user
         #######need to check if its admin or client doing the call
+        print(target_user_id, curr_user_id)
         if target_user_id and target_user_id != curr_user_id:
-            # Check if curr_id has the 'admin' role
-            is_admin_or_client = db.session.query(UserRoles).join(Roles).filter(
-                UserRoles.user_id == curr_auth_id,
-                Roles.name == 'admin',
-                Roles.name == 'client',
-            ).first()
-
-            if not is_admin_or_client:
-                abort(403, description="Admin access required to view other profiles.")
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
         
@@ -208,6 +201,7 @@ class CoachProfileView(MethodView):
 
         if not profile:
             return {"message":"Coach profile not found."}, 404
+        
         return profile
     
     @jwt_required()
@@ -478,6 +472,7 @@ class CoachBrowse(MethodView):
             CoachProfiles.coach_profile_id,
             Users.first_name,
             Users.last_name,
+            Users.user_id,
             Specialties.name.label("specialty_name"),
             CoachProfiles.years_experience,
             CoachProfiles.bio
