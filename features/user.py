@@ -16,14 +16,14 @@ user_blp = Blueprint("Users", __name__, url_prefix="/user", description="Operati
 @user_blp.route("/me")
 class UserMeProfile(MethodView):
 
-    # @jwt_required()
+    @jwt_required()
     @user_blp.response(200, UserInfoSchema)
     def get(self):
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
         return user
     
-    # @jwt_required()
+    @jwt_required()
     @user_blp.arguments(UserUpdateSchema)
     @user_blp.response(200, UserInfoSchema)
     def patch(self, update_data):
@@ -36,7 +36,7 @@ class UserMeProfile(MethodView):
         db.session.commit()
         return user
     
-    # @jwt_required()
+    @jwt_required()
     def delete(self):
         """
         Deletes the current user's account based on JWT identity
@@ -63,7 +63,7 @@ class UserLookup(MethodView):
         user = Users.query.get_or_404(user_id)
         return user
     
-    # @jwt_required()
+    @jwt_required()
     @user_blp.arguments(UserUpdateSchema)
     @user_blp.response(200, UserInfoSchema)
     def patch(self, update_data, user_id):
