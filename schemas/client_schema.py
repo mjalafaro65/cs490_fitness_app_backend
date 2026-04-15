@@ -57,3 +57,11 @@ class HireRequestListSchema(Schema):
     auto_pay_enabled = fields.Bool()
     created_at = fields.DateTime()
     decided_at = fields.DateTime(allow_none=True)
+class ReviewCoachSchema(Schema):
+    ### For editing reviews
+    review_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+    ### For creating reviews
+    rating = fields.Int(required=True, validate=validate.Range(min=1, max=100))
+    comment = fields.Str(validate=validate.Length(max=1000))
+

@@ -13,6 +13,7 @@ class CoachProfiles(db.Model):
 
     coach_profile_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     specialty_id = db.Column(db.Integer, db.ForeignKey('specialties.specialty_id'), nullable=False)
     years_experience = db.Column(db.Integer, nullable=False)
     bio = db.Column(db.Text, nullable=True)

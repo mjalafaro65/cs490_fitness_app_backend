@@ -13,5 +13,6 @@ class SharedPlans(db.Model):
     plan_id = db.Column(db.Integer, db.ForeignKey('workout_plans.plan_id'), nullable=False)
     shared_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     shared_with_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    # cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")
     share_type = db.Column(db.Enum(ShareTypeEnum))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

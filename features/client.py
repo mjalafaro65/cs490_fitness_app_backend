@@ -3,12 +3,12 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
-from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -385,3 +385,80 @@ class ClientHireRequestStatusView(MethodView):
             abort(403, description="Not allowed")
 
         return hire_request
+### Client Reviews Coach
+@client_blp.route("/review-coach/<int:coach_id>")
+class ReviewCoachView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(ReviewCoachSchema)
+    @client_blp.response(200, ReviewCoachSchema)
+    def post(self, data, coach_id):
+        current_auth_id = get_jwt_identity()
+
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+
+        coach = CoachProfiles.query.get(coach_id)
+        if not coach:
+            abort(404, description="Coach profile not found.")
+
+        existing_review = CoachReviews.query.filter_by(
+            coach_profile_id=coach_id,
+            client_user_id=user.user_id
+        ).first()
+
+        if existing_review:
+            abort(400, description="You have already submitted a review for this coach.")
+
+        review = CoachReviews(
+            coach_profile_id=coach_id,
+            client_user_id=user.user_id,
+            rating=data['rating'],
+            comment=data.get('comment')
+        )
+
+        try:
+            db.session.add(review)
+            db.session.commit()
+            return review
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Database error: {str(e)}")
+
+### Manage Personal Reviews
+@client_blp.route("/my-reviews")
+class ClientReviewsView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, ReviewCoachSchema(many=True))
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        return CoachReviews.query.filter_by(client_user_id=user.user_id).all()
+
+### Editing Client's own review
+@client_blp.route("/my-reviews/<int:review_id>")
+class EditReviewView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(ReviewCoachSchema(partial=True))
+    @client_blp.response(200, ReviewCoachSchema)
+    def patch(self, data, review_id):
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+
+        review = CoachReviews.query.filter_by(
+            review_id=review_id, 
+            client_user_id=user.user_id
+        ).first()
+        if not review:
+            abort(404, description="Review not found.")
+
+        for key, value in data.items():
+            setattr(review, key, value)
+
+        db.session.commit()
+        return review
