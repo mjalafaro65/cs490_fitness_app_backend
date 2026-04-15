@@ -1,4 +1,6 @@
 from marshmallow import Schema, fields, validate
+from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+from models import Users
 
 class RegisterSchema(Schema):
     email = fields.Email(required=True)
@@ -24,3 +26,4 @@ class UserSetupSchema(Schema):
 
     # read-only output
     user_id = fields.Int(dump_only=True)
+    

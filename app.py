@@ -18,6 +18,7 @@ from features.workouts import workout_blp
 from features.notifications import notif_blp
 from features.messaging import messaging_blp
 from features.socketio_events import socketio
+from features.user import user_blp
 
 load_dotenv()
 
@@ -29,12 +30,12 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     #Connection arguments
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "connect_args": {
-            "ssl_ca": ca_path,
-            "ssl_verify_cert": True
-        }
-    }
+    # SQLALCHEMY_ENGINE_OPTIONS = {
+    #     "connect_args": {
+    #         "ssl_ca": ca_path,
+    #         "ssl_verify_cert": True
+    #     }
+    # }
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
@@ -84,6 +85,9 @@ api.register_blueprint(workout_blp)
 api.register_blueprint(admin_blp)
 api.register_blueprint(notif_blp)
 api.register_blueprint(messaging_blp)
+api.register_blueprint(user_blp)
+
+
 
 @app.route('/')
 def home():

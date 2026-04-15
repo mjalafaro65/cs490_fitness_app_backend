@@ -406,6 +406,7 @@ class ReviewCoachView(MethodView):
             coach_profile_id=coach_id,
             client_user_id=user.user_id
         ).first()
+        print(existing_review)
 
         if existing_review:
             abort(400, description="You have already submitted a review for this coach.")
@@ -446,6 +447,7 @@ class EditReviewView(MethodView):
     @client_blp.response(200, ReviewCoachSchema)
     def patch(self, data, review_id):
         current_auth_id = get_jwt_identity()
+        
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         if not user:
             abort(404, description="User record not found.")
