@@ -589,3 +589,7 @@ class CoachRecommendations(MethodView):
 
         return query.all()
         
+
+
+
+

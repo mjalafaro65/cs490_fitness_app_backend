@@ -30,3 +30,30 @@ class ProfileSchema(Schema):
     
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+
+class HireRequestCreateSchema(Schema):
+    coach_profile_id = fields.Int(required=True)
+    payment_plan_id = fields.Int(required=True)
+    auto_pay_enabled = fields.Bool(load_default=False)
+
+
+class HireRequestStatusSchema(Schema):
+    request_id = fields.Int()
+    client_user_id = fields.Int()
+    coach_profile_id = fields.Int()
+    payment_plan_id = fields.Int(allow_none=True)
+    status = fields.Str()
+    auto_pay_enabled = fields.Bool()
+    created_at = fields.DateTime()
+    decided_at = fields.DateTime(allow_none=True)
+
+
+class HireRequestListSchema(Schema):
+    request_id = fields.Int()
+    coach_profile_id = fields.Int()
+    payment_plan_id = fields.Int(allow_none=True)
+    status = fields.Str()
+    auto_pay_enabled = fields.Bool()
+    created_at = fields.DateTime()
+    decided_at = fields.DateTime(allow_none=True)
