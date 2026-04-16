@@ -11,7 +11,8 @@ from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
 from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema
 from schemas.user_schema import UserInfoSchema
 from models.coach_profiles import ApprovalStatusEnum
-
+from sqlalchemy import func
+from datetime import datetime, timedelta
 from models.coach_documents import StatusEnum
 
 admin_blp=Blueprint("Admin", __name__, url_prefix="/admin", description="Admin features")
@@ -135,9 +136,10 @@ class AdminPurgeUserView(MethodView):
         db.session.commit()
         return {"message": "User purged successfully."}
     
+    
 @admin_blp.route("/users")
 class AdminUsersView(MethodView):
-    @roles_required("admin")
+    # @roles_required("admin")
     @admin_blp.response(200, UserInfoSchema(many=True))
     def get(self):
         """
@@ -156,3 +158,29 @@ class AdminUsersView(MethodView):
             query = query.filter(Users.is_active == is_active)
 
         return query.order_by(Users.created_at.desc()).all()
+    
+    
+@admin_blp.route("/users/stats")
+class AdminUserStatsView(MethodView):
+    # @roles_required("admin")
+    def get(self):
+
+        total_users = Users.query.count()
+
+        active_users = Users.query.filter_by(is_active=True).count()
+
+        inactive_users = Users.query.filter_by(is_active=False).count()
+
+        # users created in last 7 days
+        last_7_days = datetime.now(timezone.utc) - timedelta(days=7)
+
+        new_users = Users.query.filter(
+            Users.created_at >= last_7_days
+        ).count()
+
+        return {
+            "total_users": total_users,
+            "active_users": active_users,
+            "inactive_users": inactive_users,
+            "new_users_last_7_days": new_users
+        }
