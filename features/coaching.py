@@ -586,6 +586,10 @@ class CoachRecommendations(MethodView):
 
         return query.all()
         
+
+
+
+
 @coach_blp.route("/assign-workout/plan")
 class AssignWorkoutPlan(MethodView):
     @jwt_required()
