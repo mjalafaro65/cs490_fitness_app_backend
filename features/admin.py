@@ -2,7 +2,7 @@ from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, CoachReviews, AccountDeletionInfo
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, CoachReviews, AccountDeletionInfo, ClientProfiles
 from db import db
 from datetime import date, datetime, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -169,7 +169,7 @@ class AdminUsersView(MethodView):
     
 @admin_blp.route("/users/stats")
 class AdminUserStatsView(MethodView):
-    @roles_required("admin")
+    # @roles_required("admin")
     def get(self):
 
         total_users = Users.query.count()
@@ -179,25 +179,28 @@ class AdminUserStatsView(MethodView):
         inactive_users = Users.query.filter_by(is_active=False).count()
         
         deleted_users = AccountDeletionInfo.query.count()
+        
+        client_users = ClientProfiles.query.count()
 
         # users created in last 7 days
         last_7_days = datetime.now(timezone.utc) - timedelta(days=7)
 
-        new_users = Users.query.filter(
-            Users.created_at >= last_7_days
+        new_c_users= ClientProfiles.query.filter(
+            ClientProfiles.created_at >= last_7_days
         ).count()
         
         del_count = AccountDeletionInfo.query.filter(
             AccountDeletionInfo.requested_at >= last_7_days
         ).count()
 
+        # non admin
 
         return {
             "total_users": total_users,
             "active_users": active_users,
             "inactive_users": inactive_users,
             "deleted_users": deleted_users,
-            "new_users_last_7_days": new_users,
-            "deletions_last_7_days": del_count
-            
+            "new_client_users_last_7": new_c_users,
+            "deletions_last_7_days": del_count,
+            "client_users": client_users,         
         }
