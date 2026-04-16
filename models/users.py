@@ -124,10 +124,10 @@ class Users(db.Model):
     #     foreign_keys="WorkoutPlanAssignments.assigned_by_user_id",
     #     cascade="all, delete-orphan"
     # )
-    workout_plans = db.relationship(
-        "WorkoutPlans",
-        cascade="all, delete-orphan"
-    )
+    # workout_plans = db.relationship(
+    #     "WorkoutPlans",
+    #     cascade="all, delete-orphan"
+    # )
 
 
     first_name = db.Column(db.String(255), nullable=False)
