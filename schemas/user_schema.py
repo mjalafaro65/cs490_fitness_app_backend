@@ -18,3 +18,7 @@ class UserUpdateSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Users
         fields = ("first_name", "last_name", "phone_number")
+        
+class UserDeleteSchema(Schema):
+    reason = fields.String(required=False, allow_none=True)
+    detailed_reason = fields.String(required=False, allow_none=True)

@@ -5,10 +5,10 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from db import db
 from models import UserAuths, UserRoles, Roles, Users
 from middleware import roles_required 
-from schemas.user_schema import  UserInfoSchema, UserUpdateSchema
+from schemas.user_schema import  UserInfoSchema, UserUpdateSchema, UserDeleteSchema
 from flask import jsonify
 from models.coach_profiles import CoachProfiles # Ensure this path is correct
-from models import Users, ClientProfiles, CoachProfiles
+from models import Users, ClientProfiles, CoachProfiles, AccountDeletionInfo
 
 user_blp = Blueprint("Users", __name__, url_prefix="/user", description="Operations for  all Users")
 
@@ -37,7 +37,7 @@ class UserMeProfile(MethodView):
         return user
     
     @jwt_required()
-    def delete(self):
+    def delete(self, data):
         """
         Deletes the current user's account based on JWT identity
         """
@@ -47,6 +47,13 @@ class UserMeProfile(MethodView):
         user_auth=UserAuths.query.get_or_404(current_auth_id)
 
         try:
+            deletion_log = AccountDeletionInfo(
+                auth_id=current_auth_id,
+                reason=data.get("reason"),
+                detailed_reason=data.get("detailed_reason"))
+            
+            db.session.add(deletion_log)
+            
             db.session.delete(user_auth)
             db.session.commit()
             return {"msg": "Account successfully deleted"}, 200
