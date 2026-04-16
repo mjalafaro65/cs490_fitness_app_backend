@@ -6,7 +6,7 @@ from sqlalchemy import or_, and_
 from db import db
 from models import (
     Messages, Conversations, ConversationParticipants, 
-    Users, OnlineUsers
+    Users, OnlineUsers,  CoachClientRelationships, CoachProfiles
 )
 from schemas.messaging_schema import (
     MessageSchema, ConversationSchema, CreateConversationSchema,
@@ -49,78 +49,174 @@ class ConversationList(MethodView):
         
         return conversations
 
+# @messaging_blp.route("/conversations")
+# class CreateConversation(MethodView):
+#     @jwt_required()
+#     @messaging_blp.arguments(CreateConversationSchema)
+#     @messaging_blp.response(201, ConversationSchema)
+#     def post(self, data):
+#         """Create a new conversation"""
+#         user = _current_user()
+#         participant_ids = data['participant_ids']
+        
+#         # Ensure current user is included in participants
+#         if user.user_id not in participant_ids:
+#             participant_ids.append(user.user_id)
+        
+#         # Check if conversation already exists for direct messages
+#         if data['conversation_type'] == 'direct' and len(participant_ids) == 2:
+#             existing_conversation = db.session.query(Conversations).join(
+#                 ConversationParticipants,
+#                 Conversations.conversation_id == ConversationParticipants.conversation_id
+#             ).filter(
+#                 Conversations.conversation_type == 'direct',
+#                 ConversationParticipants.user_id.in_(participant_ids)
+#             ).group_by(Conversations.conversation_id).having(
+#                 db.func.count(ConversationParticipants.user_id) == 2
+#             ).first()
+            
+#             if existing_conversation:
+#                 return existing_conversation
+        
+#         relationship_id = data["relationship_id"]
+#         existing_convo = Conversations.query.filter_by(
+#             relationship_id=relationship_id
+#         ).first()
+
+#         if existing_convo:
+#             return existing_convo  # or return 200 with it
+        
+#         # Create new conversation
+#         # Generate unique relationship_id if needed
+#         relationship_id = data['relationship_id']
+#         if relationship_id == 0:
+#             # Generate a unique relationship_id using timestamp
+#             relationship_id = int(datetime.utcnow().timestamp())
+        
+#         new_conversation = Conversations(
+#             relationship_id=relationship_id,
+#             conversation_type=data['conversation_type']
+#         )
+        
+        
+#         try:
+#             db.session.add(new_conversation)
+#             db.session.flush()  # Get the conversation_id
+            
+#             for user_id in set(participant_ids):
+#                 db.session.add(ConversationParticipants(
+#                     conversation_id=new_conversation.conversation_id,
+#                     user_id=user_id
+#                 ))
+
+#         except Exception as e:
+#             # Handle duplicate relationship_id
+#             if "Duplicate entry" in str(e):
+#                 # Generate a new unique relationship_id
+#                 relationship_id = int(datetime.utcnow().timestamp()) + len(participant_ids)
+#                 new_conversation.relationship_id = relationship_id
+#                 db.session.add(new_conversation)
+#                 db.session.flush()
+#             else:
+#                 raise e
+        
+#         # Add participants (check for duplicates)
+#         for user_id in participant_ids:
+#             # Check if participant already exists
+#             existing_participant = ConversationParticipants.query.filter_by(
+#                 conversation_id=new_conversation.conversation_id,
+#                 user_id=user_id
+#             ).first()
+            
+#             if not existing_participant:
+#                 participant = ConversationParticipants(
+#                     conversation_id=new_conversation.conversation_id,
+#                     user_id=user_id
+#                 )
+#                 db.session.add(participant)
+        
+#         db.session.commit()
+#         return new_conversation
+
 @messaging_blp.route("/conversations")
 class CreateConversation(MethodView):
+
     @jwt_required()
     @messaging_blp.arguments(CreateConversationSchema)
     @messaging_blp.response(201, ConversationSchema)
     def post(self, data):
-        """Create a new conversation"""
+
         user = _current_user()
-        participant_ids = data['participant_ids']
-        
-        # Ensure current user is included in participants
-        if user.user_id not in participant_ids:
-            participant_ids.append(user.user_id)
-        
-        # Check if conversation already exists for direct messages
-        if data['conversation_type'] == 'direct' and len(participant_ids) == 2:
-            existing_conversation = db.session.query(Conversations).join(
-                ConversationParticipants,
-                Conversations.conversation_id == ConversationParticipants.conversation_id
-            ).filter(
-                Conversations.conversation_type == 'direct',
-                ConversationParticipants.user_id.in_(participant_ids)
-            ).group_by(Conversations.conversation_id).having(
-                db.func.count(ConversationParticipants.user_id) == 2
+        participant_ids = set(data["participant_ids"])
+
+        # ensure current user is included
+        participant_ids.add(user.user_id)
+
+        conversation_type = data["conversation_type"]
+        relationship_id = data.get("relationship_id")
+
+        # -------------------------------------------------
+        # 1. DIRECT CHAT DEDUPLICATION
+        # -------------------------------------------------
+        if conversation_type == "direct" and len(participant_ids) == 2:
+
+            existing = (
+                db.session.query(Conversations)
+                .join(ConversationParticipants)
+                .filter(Conversations.conversation_type == "direct")
+                .group_by(Conversations.conversation_id)
+                .having(
+                    db.func.count(ConversationParticipants.user_id) == 2
+                )
+                .first()
+            )
+
+            if existing:
+                return existing, 200
+
+        # -------------------------------------------------
+        # 2. RELATIONSHIP-BASED DEDUPLICATION
+        # -------------------------------------------------
+        if relationship_id:
+            existing = Conversations.query.filter_by(
+                relationship_id=relationship_id
             ).first()
-            
-            if existing_conversation:
-                return existing_conversation
-        
-        # Create new conversation
-        # Generate unique relationship_id if needed
-        relationship_id = data['relationship_id']
-        if relationship_id == 0:
-            # Generate a unique relationship_id using timestamp
-            relationship_id = int(datetime.utcnow().timestamp())
-        
+
+            if existing:
+                return existing, 200
+
+        # -------------------------------------------------
+        # 3. CREATE CONVERSATION
+        # -------------------------------------------------
         new_conversation = Conversations(
             relationship_id=relationship_id,
-            conversation_type=data['conversation_type']
+            conversation_type=conversation_type
         )
-        
-        try:
-            db.session.add(new_conversation)
-            db.session.flush()  # Get the conversation_id
-        except Exception as e:
-            # Handle duplicate relationship_id
-            if "Duplicate entry" in str(e):
-                # Generate a new unique relationship_id
-                relationship_id = int(datetime.utcnow().timestamp()) + len(participant_ids)
-                new_conversation.relationship_id = relationship_id
-                db.session.add(new_conversation)
-                db.session.flush()
-            else:
-                raise e
-        
-        # Add participants (check for duplicates)
-        for user_id in participant_ids:
-            # Check if participant already exists
-            existing_participant = ConversationParticipants.query.filter_by(
+
+        db.session.add(new_conversation)
+        db.session.flush()  # generates conversation_id
+
+        # -------------------------------------------------
+        # 4. ADD PARTICIPANTS (ONLY ONCE)
+        # -------------------------------------------------
+        db.session.add_all([
+            ConversationParticipants(
                 conversation_id=new_conversation.conversation_id,
-                user_id=user_id
-            ).first()
-            
-            if not existing_participant:
-                participant = ConversationParticipants(
-                    conversation_id=new_conversation.conversation_id,
-                    user_id=user_id
-                )
-                db.session.add(participant)
-        
-        db.session.commit()
-        return new_conversation
+                user_id=uid
+            )
+            for uid in participant_ids
+        ])
+
+        # -------------------------------------------------
+        # 5. COMMIT SAFELY
+        # -------------------------------------------------
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            return {"message": "Failed to create conversation"}, 500
+
+        return new_conversation, 201
 
 @messaging_blp.route("/conversations/<int:conversation_id>")
 class ConversationDetail(MethodView):
@@ -155,7 +251,7 @@ class MessageList(MethodView):
         participant = ConversationParticipants.query.filter_by(
             conversation_id=conversation_id,
             user_id=user.user_id,
-            is_active=True
+            # is_active=True
         ).first()
         
         if not participant:
@@ -263,3 +359,99 @@ class TypingIndicator(MethodView):
         
         # This will be handled by WebSocket events
         return {"message": "Typing indicator sent via WebSocket"}
+    
+@messaging_blp.route("/relationships")
+class UserRelationships(MethodView):
+    @jwt_required()
+    def get(self):
+        user = _current_user()
+        print(user.user_id)
+
+        coach_profile = CoachProfiles.query.filter_by(
+            user_id=user.user_id
+        ).first()
+        print(coach_profile)
+
+
+        query = db.session.query(CoachClientRelationships).filter(
+            CoachClientRelationships.status == "active"
+        )
+
+        if coach_profile:
+            query = query.filter(
+                CoachClientRelationships.coach_profile_id == coach_profile.coach_profile_id
+            )
+        else:
+            query = query.filter(
+                CoachClientRelationships.client_user_id == user.user_id
+            )
+           
+
+        relationships = query.all()
+        print(relationships)
+        
+        print("USER:", user.user_id)
+        print("COACH PROFILE:", coach_profile)
+
+        if coach_profile:
+            print("PROFILE ID:", coach_profile.coach_profile_id)
+
+        count = db.session.query(CoachClientRelationships).count()
+        print("TOTAL RELATIONSHIPS:", count)
+        print(db.session.query(CoachClientRelationships).all())
+        
+        from sqlalchemy import text
+        print(CoachClientRelationships.__tablename__)
+
+        print(db.session.execute(text("SELECT DATABASE()")).fetchone())
+        rel = CoachClientRelationships.query.first()
+        print(rel.client_user_id, type(rel.client_user_id))
+        print(CoachClientRelationships.client_user_id.type)
+        result = []
+
+        for rel in relationships:
+            client = Users.query.get(rel.client_user_id)
+            print(client.user_id)
+
+
+            coach_profile = CoachProfiles.query.get(rel.coach_profile_id)
+            if not coach_profile:
+                continue
+
+            coach = Users.query.get(coach_profile.user_id)
+            if not coach:
+                continue
+
+            is_client = user.user_id == client.user_id
+            
+
+            other_user = coach if is_client else client
+            relationship_role = "client" if is_client else "coach"
+
+            result.append({
+                "relationship_id": rel.relationship_id,
+                "status":  str(rel.status), 
+                "started_at": rel.started_at,
+
+                "client": {
+                    "user_id": client.user_id,
+                    "first_name": client.first_name,
+                    "last_name": client.last_name
+                },
+
+                "coach": {
+                    "user_id": coach.user_id,
+                    "first_name": coach.first_name,
+                    "last_name": coach.last_name
+                },
+
+                "other_user": {
+                    "user_id": coach.user_id if is_client else client.user_id,
+                    "first_name": coach.first_name if is_client else client.first_name,
+                    "last_name":coach.last_name if is_client else client.last_name
+                },
+
+                "relationship_role": relationship_role
+            })
+
+        return result
