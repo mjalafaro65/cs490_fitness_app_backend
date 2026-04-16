@@ -81,6 +81,20 @@ class CoachBrowsingSchema(Schema):
 
 
 
+class PaymentPlanSchema(Schema):
+    payment_plan_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(required=True)
+    name = fields.Str(required=True)
+    billing_type = fields.Str(validate=validate.OneOf(['recurring', 'onetime']), required=True)
+    #billing_type = fields.Str(required=True)
+    amount = fields.Decimal(as_string=True, required=True)
+    is_active = fields.Bool(dump_only=True)
+    is_custom = fields.Bool(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+
+
+
+
 #class CoachFiltering(Schema):
 #    pass
 
