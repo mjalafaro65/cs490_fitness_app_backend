@@ -9,7 +9,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
 from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema
-from schemas.user_schema import UserInfoSchema
+from schemas.user_schema import UserInfoSchema, UserQuerySchema
 from models.coach_profiles import ApprovalStatusEnum
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -139,15 +139,18 @@ class AdminPurgeUserView(MethodView):
     
 @admin_blp.route("/users")
 class AdminUsersView(MethodView):
-    # @roles_required("admin")
+    @admin_blp.arguments(UserQuerySchema, location="query")
     @admin_blp.response(200, UserInfoSchema(many=True))
-    def get(self):
+    def get(self, args):
+        
         """
-        Get all users with optional filters
+        Get users with filters + pagination
         """
 
         user_id = request.args.get("user_id", type=int)
-        is_active = request.args.get("is_active", type=bool)
+        is_active = request.args.get("is_active", type=int) 
+        page = request.args.get("page", default=1, type=int)
+        per_page = request.args.get("per_page", default=20, type=int)
 
         query = Users.query
 
@@ -155,10 +158,13 @@ class AdminUsersView(MethodView):
             query = query.filter(Users.user_id == user_id)
 
         if is_active is not None:
-            query = query.filter(Users.is_active == is_active)
+            query = query.filter(Users.is_active == bool(is_active))
 
-        return query.order_by(Users.created_at.desc()).all()
-    
+        query = query.order_by(Users.created_at.desc())
+
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        return paginated.items
     
 @admin_blp.route("/users/stats")
 class AdminUserStatsView(MethodView):
