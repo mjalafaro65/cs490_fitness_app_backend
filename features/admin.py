@@ -9,7 +9,9 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
 from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema
+from schemas.user_schema import UserInfoSchema
 from models.coach_profiles import ApprovalStatusEnum
+
 from models.coach_documents import StatusEnum
 
 admin_blp=Blueprint("Admin", __name__, url_prefix="/admin", description="Admin features")
@@ -132,3 +134,25 @@ class AdminPurgeUserView(MethodView):
         db.session.delete(user)
         db.session.commit()
         return {"message": "User purged successfully."}
+    
+@admin_blp.route("/users")
+class AdminUsersView(MethodView):
+    @roles_required("admin")
+    @admin_blp.response(200, UserInfoSchema(many=True))
+    def get(self):
+        """
+        Get all users with optional filters
+        """
+
+        user_id = request.args.get("user_id", type=int)
+        is_active = request.args.get("is_active", type=bool)
+
+        query = Users.query
+
+        if user_id:
+            query = query.filter(Users.user_id == user_id)
+
+        if is_active is not None:
+            query = query.filter(Users.is_active == is_active)
+
+        return query.order_by(Users.created_at.desc()).all()
