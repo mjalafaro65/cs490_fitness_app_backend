@@ -20,6 +20,7 @@ class MealPlanAssignments(db.Model):
     assignment_id = db.Column(db.Integer, primary_key=True)
     meal_plan_id = db.Column(db.Integer, db.ForeignKey('meal_plans.meal_plan_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     assigned_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=True)

@@ -2,13 +2,13 @@ from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, CoachReviews
 from db import db
 from datetime import date, datetime, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
-from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema
+from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_documents import StatusEnum
 
@@ -119,3 +119,16 @@ class AdminReviewActionView(MethodView):
 
         db.session.commit()
         return review
+
+@admin_blp.route("/purge-user")
+class AdminPurgeUserView(MethodView):
+    @roles_required("admin")
+    @admin_blp.arguments(AdminPurgeUserSchema)
+    @admin_blp.response(200, description="User and all related data purged.")
+    def delete(self, update_data):
+        user_id = update_data.get('user_id')
+        user = Users.query.get_or_404(user_id)
+
+        db.session.delete(user)
+        db.session.commit()
+        return {"message": "User purged successfully."}

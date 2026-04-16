@@ -7,6 +7,7 @@ class MealLogs(db.Model):
     
     meal_log_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, ForeignKey('users.user_id'), nullable=False)
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     meal_id = db.Column(db.Integer, ForeignKey('meals.meal_id'), nullable=False)
     logged_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     servings = db.Column(db.Numeric(6, 2), nullable=False)
