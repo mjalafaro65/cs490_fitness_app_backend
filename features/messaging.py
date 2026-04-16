@@ -13,6 +13,21 @@ from schemas.messaging_schema import (
     SendMessageSchema, MarkMessageReadSchema, OnlineUserSchema
 )
 
+def _auth_id_int():
+    raw = get_jwt_identity()
+    if raw is None:
+        abort(401, description="Not authenticated.")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        abort(401, description="Invalid token.")
+
+def _current_user():
+    user = Users.query.filter_by(auth_id=_auth_id_int()).first()
+    if not user:
+        abort(404, description="User record not found.")
+    return user
+
 messaging_blp = Blueprint("Messaging", __name__, url_prefix="/messaging", description="Instant messaging operations")
 
 @messaging_blp.route("/conversations")
@@ -21,14 +36,14 @@ class ConversationList(MethodView):
     @messaging_blp.response(200, ConversationSchema(many=True))
     def get(self):
         """Get all conversations for the current user"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         
         # Get conversations where user is a participant
         conversations = db.session.query(Conversations).join(
             ConversationParticipants,
             Conversations.conversation_id == ConversationParticipants.conversation_id
         ).filter(
-            ConversationParticipants.user_id == current_user_id,
+            ConversationParticipants.user_id == user.user_id,
             ConversationParticipants.is_active == True
         ).order_by(Conversations.updated_at.desc()).all()
         
@@ -41,12 +56,12 @@ class CreateConversation(MethodView):
     @messaging_blp.response(201, ConversationSchema)
     def post(self, data):
         """Create a new conversation"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         participant_ids = data['participant_ids']
         
         # Ensure current user is included in participants
-        if current_user_id not in participant_ids:
-            participant_ids.append(current_user_id)
+        if user.user_id not in participant_ids:
+            participant_ids.append(user.user_id)
         
         # Check if conversation already exists for direct messages
         if data['conversation_type'] == 'direct' and len(participant_ids) == 2:
@@ -113,12 +128,12 @@ class ConversationDetail(MethodView):
     @messaging_blp.response(200, ConversationSchema)
     def get(self, conversation_id):
         """Get conversation details"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         
         # Verify user is participant
         participant = ConversationParticipants.query.filter_by(
             conversation_id=conversation_id,
-            user_id=current_user_id,
+            user_id=user.user_id,
             is_active=True
         ).first()
         
@@ -134,12 +149,12 @@ class MessageList(MethodView):
     @messaging_blp.response(200, MessageSchema(many=True))
     def get(self, conversation_id):
         """Get messages in a conversation"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         
         # Verify user is participant
         participant = ConversationParticipants.query.filter_by(
             conversation_id=conversation_id,
-            user_id=current_user_id,
+            user_id=user.user_id,
             is_active=True
         ).first()
         
@@ -160,12 +175,12 @@ class SendMessage(MethodView):
     @messaging_blp.response(201, MessageSchema)
     def post(self, data, conversation_id):
         """Send a message to a conversation"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         
         # Verify user is participant
         participant = ConversationParticipants.query.filter_by(
             conversation_id=conversation_id,
-            user_id=current_user_id,
+            user_id=user.user_id,
             is_active=True
         ).first()
         
@@ -175,7 +190,7 @@ class SendMessage(MethodView):
         # Create message
         new_message = Messages(
             conversation_id=conversation_id,
-            sender_user_id=current_user_id,
+            sender_user_id=user.user_id,
             body=data['body'],
             message_type=data['message_type'],
             sent_at=datetime.utcnow()
@@ -196,18 +211,18 @@ class MarkMessageRead(MethodView):
     @messaging_blp.response(200, MessageSchema)
     def put(self, message_id):
         """Mark a message as read"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         
         message = Messages.query.get_or_404(message_id)
         
         # Verify user is participant and not the sender
         participant = ConversationParticipants.query.filter_by(
             conversation_id=message.conversation_id,
-            user_id=current_user_id,
+            user_id=user.user_id,
             is_active=True
         ).first()
         
-        if not participant or message.sender_user_id == current_user_id:
+        if not participant or message.sender_user_id == user.user_id:
             abort(403, description="Cannot mark this message as read")
         
         # Mark as read
@@ -234,12 +249,12 @@ class TypingIndicator(MethodView):
     @jwt_required()
     def post(self, conversation_id):
         """Send typing indicator (placeholder for WebSocket implementation)"""
-        current_user_id = get_jwt_identity()
+        user = _current_user()
         
         # Verify user is participant
         participant = ConversationParticipants.query.filter_by(
             conversation_id=conversation_id,
-            user_id=current_user_id,
+            user_id=user.user_id,
             is_active=True
         ).first()
         

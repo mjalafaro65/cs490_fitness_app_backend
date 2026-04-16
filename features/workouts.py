@@ -48,21 +48,8 @@ workout_blp = Blueprint(
 )
 
 
-def _auth_id_int():
-    raw = get_jwt_identity()
-    if raw is None:
-        abort(401, description="Not authenticated.")
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        abort(401, description="Invalid token.")
 
 
-def _current_user():
-    user = Users.query.filter_by(auth_id=_auth_id_int()).first()
-    if not user:
-        abort(404, description="User record not found.")
-    return user
 
 
 def _exercise_visible_to_user(ex: Exercises, user_id: int) -> bool:
@@ -223,12 +210,12 @@ class ExerciseCollection(MethodView):
     @workout_blp.response(200)
     def get(self, args):
         """List exercises you can add to a plan: defaults, published customs, and your own."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         q = Exercises.query.filter(Exercises.is_active.is_(True))
         visibility = or_(
             Exercises.created_by_user_id.is_(None),
             Exercises.is_public.is_(True),
-            Exercises.created_by_user_id == user.user_id,
+            Exercises.created_by_user_id == user_id,
         )
         q = q.filter(visibility)
         if args.get("muscle_group"):
@@ -248,7 +235,7 @@ class ExerciseCollection(MethodView):
     @workout_blp.response(201)
     def post(self, data):
         """Create a custom exercise; set is_public to publish it alongside defaults."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         ex = Exercises(
             name=data["name"],
             muscle_group=data["muscle_group"],
@@ -256,7 +243,7 @@ class ExerciseCollection(MethodView):
             training_type=data["training_type"],
             description=data.get("description"),
             is_active=True,
-            created_by_user_id=user.user_id,
+            created_by_user_id=user_id,
             is_public=bool(data.get("is_public", False)),
         )
         db.session.add(ex)
@@ -274,11 +261,11 @@ class ExerciseItem(MethodView):
     @workout_blp.response(200)
     def get(self, exercise_id):
         """Get exercise details by ID."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         ex = Exercises.query.get(exercise_id)
         if not ex:
             abort(404, description="Exercise not found.")
-        if not _exercise_visible_to_user(ex, user.user_id):
+        if not _exercise_visible_to_user(ex, user_id):
             abort(404, description="Exercise not found.")
         return _serialize_exercise(ex)
 
@@ -287,13 +274,13 @@ class ExerciseItem(MethodView):
     @workout_blp.response(200)
     def patch(self, data, exercise_id):
         """Update your custom exercise (cannot edit catalog defaults)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         ex = Exercises.query.get(exercise_id)
         if not ex:
             abort(404, description="Exercise not found.")
         if ex.created_by_user_id is None:
             abort(403, description="Catalog exercises cannot be edited.")
-        if ex.created_by_user_id != user.user_id:
+        if ex.created_by_user_id != user_id:
             abort(403, description="Not allowed to edit this exercise.")
         if "name" in data and data["name"] is not None:
             ex.name = data["name"]
@@ -318,13 +305,13 @@ class ExerciseItem(MethodView):
     @workout_blp.response(200)
     def delete(self, exercise_id):
         """Deactivate your custom exercise (cannot delete catalog defaults)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         ex = Exercises.query.get(exercise_id)
         if not ex:
             abort(404, description="Exercise not found.")
         if ex.created_by_user_id is None:
             abort(403, description="Catalog exercises cannot be deleted.")
-        if ex.created_by_user_id != user.user_id:
+        if ex.created_by_user_id != user_id:
             abort(403, description="Not allowed.")
         ex.is_active = False
         try:
@@ -342,9 +329,9 @@ class PlanCollection(MethodView):
     @workout_blp.response(201)
     def post(self, data):
         """Create a plan shell (name, description); add days and exercises next."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans(
-            owner_user_id=user.user_id,
+            owner_user_id=user_id,
             name=data["name"],
             description=data.get("description"),
             is_public=bool(data.get("is_public", False)),
@@ -355,7 +342,7 @@ class PlanCollection(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan(plan, user.user_id, detail=True)
+        return _serialize_plan(plan, user_id, detail=True)
 
 
 @workout_blp.route("/plans/mine")
@@ -364,15 +351,15 @@ class MyPlans(MethodView):
     @workout_blp.response(200)
     def get(self):
         """Get all workout plans you own (private and public)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plans = (
-            WorkoutPlans.query.filter_by(owner_user_id=user.user_id)
+            WorkoutPlans.query.filter_by(owner_user_id=user_id)
             .filter(WorkoutPlans.is_active == True)
             .order_by(WorkoutPlans.updated_at.desc())
             .all()
         )
         return {
-            "plans": [_serialize_plan(p, user.user_id, detail=False) for p in plans]
+            "plans": [_serialize_plan(p, user_id, detail=False) for p in plans]
         }
 
 
@@ -383,7 +370,7 @@ class BrowsePlans(MethodView):
     @workout_blp.response(200)
     def get(self, args):
         """Browse published plans; filter by name or by exercises / characteristics."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         q = WorkoutPlans.query.filter(
             WorkoutPlans.is_public.is_(True),
             WorkoutPlans.is_active == True
@@ -491,7 +478,7 @@ class BrowsePlans(MethodView):
 
         plans = q.order_by(WorkoutPlans.updated_at.desc()).all()
         return {
-            "plans": [_serialize_plan(p, user.user_id, detail=False) for p in plans]
+            "plans": [_serialize_plan(p, user_id, detail=False) for p in plans]
         }
 
 
@@ -501,28 +488,28 @@ class PlanItem(MethodView):
     @workout_blp.response(200)
     def get(self, plan_id):
         """Get workout plan details with all days and exercises."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_readable(plan, user.user_id):
+        if not plan or not _plan_readable(plan, user_id):
             abort(404, description="Plan not found.")
-        return _serialize_plan(plan, user.user_id, detail=True)
+        return _serialize_plan(plan, user_id, detail=True)
 
     @jwt_required()
     @workout_blp.arguments(PlanUpdateSchema)
     @workout_blp.response(200)
     def patch(self, data, plan_id):
         """Update your workout plan (name, description, public status)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
         if not plan:
             abort(404, description="Plan not found.")
-        if not _plan_writable(plan, user.user_id):
+        if not _plan_writable(plan, user_id):
             abort(403, description="Not allowed.")
         if "name" in data and data["name"] is not None:
             plan.name = data["name"]
@@ -535,17 +522,17 @@ class PlanItem(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan(plan, user.user_id, detail=True)
+        return _serialize_plan(plan, user_id, detail=True)
 
     @jwt_required()
     @workout_blp.response(200)
     def delete(self, plan_id):
         """Delete entire workout plan (soft delete)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan:
             abort(404, description="Plan not found.")
-        if not _plan_writable(plan, user.user_id):
+        if not _plan_writable(plan, user_id):
             abort(403, description="Not allowed.")
         
         # Soft delete
@@ -567,24 +554,24 @@ class PlanCopy(MethodView):
     @workout_blp.response(201)
     def post(self, data, plan_id):
         """Save a personal copy of a public (or your own) plan."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         source = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
         if not source:
             abort(404, description="Plan not found.")
-        if not _plan_readable(source, user.user_id):
+        if not _plan_readable(source, user_id):
             abort(404, description="Plan not found.")
         try:
             clone = _duplicate_plan_for_user(
-                source, user.user_id, data.get("name")
+                source, user_id, data.get("name")
             )
             db.session.commit()
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan(clone, user.user_id, detail=True)
+        return _serialize_plan(clone, user_id, detail=True)
 
 
 @workout_blp.route("/plans/<int:plan_id>/days")
@@ -594,12 +581,12 @@ class PlanDays(MethodView):
     @workout_blp.response(201)
     def post(self, data, plan_id):
         """Add a training day to the weekly layout (optional weekday and time)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_writable(plan, user.user_id):
+        if not plan or not _plan_writable(plan, user_id):
             abort(404, description="Plan not found.")
         day = WorkoutPlanDays(
             plan_id=plan.plan_id,
@@ -614,7 +601,7 @@ class PlanDays(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan_day(day, True, user.user_id)
+        return _serialize_plan_day(day, True, user_id)
 
 
 @workout_blp.route("/plans/<int:plan_id>/days/<int:day_id>")
@@ -624,12 +611,12 @@ class PlanDayItem(MethodView):
     @workout_blp.response(200)
     def patch(self, data, plan_id, day_id):
         """Update training day details (label, weekday, time, order)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_writable(plan, user.user_id):
+        if not plan or not _plan_writable(plan, user_id):
             abort(404, description="Plan not found.")
         day = WorkoutPlanDays.query.filter_by(
             plan_day_id=day_id, plan_id=plan_id
@@ -649,18 +636,18 @@ class PlanDayItem(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan_day(day, True, user.user_id)
+        return _serialize_plan_day(day, True, user_id)
 
     @jwt_required()
     @workout_blp.response(200)
     def delete(self, plan_id, day_id):
         """Remove training day and all its exercises."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_writable(plan, user.user_id):
+        if not plan or not _plan_writable(plan, user_id):
             abort(404, description="Plan not found.")
         day = WorkoutPlanDays.query.filter_by(
             plan_day_id=day_id, plan_id=plan_id
@@ -684,12 +671,12 @@ class PlanDayExercises(MethodView):
     @workout_blp.response(201)
     def post(self, data, plan_id, day_id):
         """Add exercise to training day with sets, reps, weight, and notes."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_writable(plan, user.user_id):
+        if not plan or not _plan_writable(plan, user_id):
             abort(404, description="Plan not found.")
         day = WorkoutPlanDays.query.filter_by(
             plan_day_id=day_id, plan_id=plan_id
@@ -697,7 +684,7 @@ class PlanDayExercises(MethodView):
         if not day:
             abort(404, description="Day not found.")
         ex = Exercises.query.get(data["exercise_id"])
-        if not ex or not _exercise_usable(ex, user.user_id):
+        if not ex or not _exercise_usable(ex, user_id):
             abort(400, description="Exercise not available.")
         weight = data.get("weight")
         if weight is not None and isinstance(weight, Decimal):
@@ -742,12 +729,12 @@ class PlanDayExerciseItem(MethodView):
     @workout_blp.response(200)
     def patch(self, data, plan_id, day_id, de_id):
         """Update exercise details (sets, reps, weight, duration, notes). de_id = day_exercise_id from response."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_writable(plan, user.user_id):
+        if not plan or not _plan_writable(plan, user_id):
             abort(404, description="Plan not found.")
         line = WorkoutPlanDayExercises.query.filter_by(
             day_exercise_id=de_id, day_id=day_id
@@ -793,12 +780,12 @@ class PlanDayExerciseItem(MethodView):
     @workout_blp.response(200)
     def delete(self, plan_id, day_id, de_id):
         """Remove exercise from training day. de_id = day_exercise_id from response."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_writable(plan, user.user_id):
+        if not plan or not _plan_writable(plan, user_id):
             abort(404, description="Plan not found.")
         line = WorkoutPlanDayExercises.query.filter_by(
             day_exercise_id=de_id, day_id=day_id
@@ -821,12 +808,12 @@ class PlanAssignments(MethodView):
     @workout_blp.response(201)
     def post(self, data, plan_id):
         """Attach a plan to your account with repeat metadata (schedule shell)."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_readable(plan, user.user_id):
+        if not plan or not _plan_readable(plan, user_id):
             abort(404, description="Plan not found.")
         repeat_raw = data.get("repeat_rule") or "weekly"
         try:
@@ -835,8 +822,8 @@ class PlanAssignments(MethodView):
             abort(400, description="Invalid repeat_rule.")
         row = WorkoutPlanAssignments(
             plan_id=plan.plan_id,
-            assigned_to_user_id=user.user_id,
-            assigned_by_user_id=user.user_id,
+            assigned_to_user_id=user_id,
+            assigned_by_user_id=user_id,
             assignment_type=AssignmentTypeEnum.self,
             start_date=data.get("start_date"),
             end_date=data.get("end_date"),
@@ -867,12 +854,12 @@ class PlanCalendar(MethodView):
     @workout_blp.response(201)
     def post(self, data, plan_id):
         """Place concrete sessions on the calendar for specific plan days."""
-        user = _current_user()
+        user_id = get_jwt_identity()
         plan = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
-        if not plan or not _plan_readable(plan, user.user_id):
+        if not plan or not _plan_readable(plan, user_id):
             abort(404, description="Plan not found.")
         created = []
         for occ in data["occurrences"]:
@@ -883,9 +870,9 @@ class PlanCalendar(MethodView):
             if not day:
                 abort(400, description=f"Invalid plan_day_id {pid} for this plan.")
             cw = CalendarWorkouts(
-                for_user_id=user.user_id,
+                for_user_id=user_id,
                 plan_day_id=pid,
-                coach_id=user.user_id,
+                coach_id=user_id,
                 scheduled_start=occ["scheduled_start"],
                 scheduled_end=occ["scheduled_end"],
                 status="scheduled",
