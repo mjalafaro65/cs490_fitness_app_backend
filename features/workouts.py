@@ -50,8 +50,6 @@ workout_blp = Blueprint(
 
 
 
-
-
 def _exercise_visible_to_user(ex: Exercises, user_id: int) -> bool:
     if not ex.is_active:
         return False

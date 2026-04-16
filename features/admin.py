@@ -169,7 +169,7 @@ class AdminUsersView(MethodView):
     
 @admin_blp.route("/users/stats")
 class AdminUserStatsView(MethodView):
-    # @roles_required("admin")
+    @roles_required("admin")
     def get(self):
 
         total_users = Users.query.count()
