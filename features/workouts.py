@@ -623,7 +623,7 @@ class PlanDays(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan_day(day, True, user.ser_id)
+        return _serialize_plan_day(day, True, user.user_id)
 
 
 @workout_blp.route("/plans/<int:plan_id>/days/<int:day_id>")
