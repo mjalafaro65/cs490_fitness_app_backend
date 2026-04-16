@@ -4,6 +4,7 @@ from flask_smorest import Blueprint
 from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
+from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
@@ -230,10 +231,23 @@ class EditDailyView(MethodView):
             abort(500, description="Failed to update the daily log.")
 
 
-@client_blp.route("/coach-hire")
-@jwt_required()
-def test():
-    return "Sweet Potato"
+
+
+@client_blp.route("/coach-payment-plans")
+class ClientPaymentPlanListView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, PaymentPlanSchema(many=True))
+    def get(self):
+        plans = PaymentPlans.query.join(
+            CoachProfiles,
+            PaymentPlans.coach_profile_id == CoachProfiles.coach_profile_id
+        ).filter(
+            PaymentPlans.is_active == True,
+            CoachProfiles.status == "approved"
+        ).all()
+
+        return plans
+
 
 
 
@@ -303,10 +317,9 @@ class ClientHireRequestCreateView(MethodView):
             print(f"SUCCESS: Created Request ID {new_request.request_id}")
             return new_request
         except Exception as e:
-            db.session.rollback()
+            db.sesssion.rollback()
             print(f"DATABASE ERROR: {str(e)}")
             abort(500, description="Internal database error")
-
 
 
 
