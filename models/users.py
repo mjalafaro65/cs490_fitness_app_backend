@@ -14,7 +14,7 @@ class Users(db.Model):
     #     backref="user", 
     #     cascade="all, delete-orphan", 
     #     single_parent=True
-    # )
+    #
     # payment_plan_overrides = db.relationship(
     #     "ClientPaymentPlanOverrides", 
     #     cascade="all, delete-orphan"
