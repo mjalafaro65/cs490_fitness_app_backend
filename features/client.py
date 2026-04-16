@@ -8,7 +8,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews
+from models.review_interactions import InteractionType
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews,  ReviewInteractions
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -437,7 +438,17 @@ class ClientReviewsView(MethodView):
         if not user:
             abort(404, description="User record not found.")
         
-        return CoachReviews.query.filter_by(client_user_id=user.user_id).all()
+        reviews = CoachReviews.query.filter_by(client_user_id=user.user_id).all()
+        
+        # Add interaction counts and user's interaction to each review
+        for review in reviews:
+            # Get user's interaction for this review
+            user_interaction = ReviewInteractions.query.filter_by(
+                review_id=review.review_id, user_id=user.user_id
+            ).first()
+            review.user_interaction = user_interaction.interaction_type.value if user_interaction else None
+        
+        return reviews
 
 ### Editing Client's own review
 @client_blp.route("/my-reviews/<int:review_id>")
@@ -464,3 +475,95 @@ class EditReviewView(MethodView):
 
         db.session.commit()
         return review
+
+### Review Interactions
+@client_blp.route("/reviews/<int:review_id>/interact")
+class ReviewInteractionView(MethodView):
+    @jwt_required()
+    @client_blp.arguments({"interaction_type": {"type": "string", "required": True, "enum": ["helpful", "unhelpful"]}})
+    def post(self, data, review_id):
+        """Add helpful/unhelpful reaction to review"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        interaction_type = data['interaction_type']
+        
+        # Check if review exists
+        review = CoachReviews.query.get(review_id)
+        if not review:
+            abort(404, description="Review not found.")
+        
+        # Check if user already interacted
+        existing = ReviewInteractions.query.filter_by(
+            review_id=review_id, user_id=user.user_id
+        ).first()
+        
+        if existing:
+            # Update existing interaction
+            old_type = existing.interaction_type.value
+            existing.interaction_type = InteractionType(interaction_type)
+            
+            # Update counts based on change
+            if old_type == 'helpful':
+                review.helpful_count -= 1
+            else:
+                review.unhelpful_count -= 1
+                
+            if interaction_type == 'helpful':
+                review.helpful_count += 1
+            else:
+                review.unhelpful_count += 1
+        else:
+            # Create new interaction
+            interaction = ReviewInteractions(
+                review_id=review_id,
+                user_id=user.user_id,
+                interaction_type=InteractionType(interaction_type)
+            )
+            db.session.add(interaction)
+            
+            # Update counts
+            if interaction_type == 'helpful':
+                review.helpful_count += 1
+            else:
+                review.unhelpful_count += 1
+        
+        try:
+            db.session.commit()
+            return {"message": "Interaction recorded successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Database error: {str(e)}")
+    
+    @jwt_required()
+    def delete(self, review_id):
+        """Remove user's interaction from review"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        interaction = ReviewInteractions.query.filter_by(
+            review_id=review_id, user_id=user.user_id
+        ).first()
+        
+        if interaction:
+            # Update counts
+            review = CoachReviews.query.get(review_id)
+            if interaction.interaction_type.value == 'helpful':
+                review.helpful_count -= 1
+            else:
+                review.unhelpful_count -= 1
+            
+            db.session.delete(interaction)
+            
+            try:
+                db.session.commit()
+                return {"message": "Interaction removed successfully"}
+            except Exception as e:
+                db.session.rollback()
+                abort(500, description=f"Database error: {str(e)}")
+        
+        return {"message": "No interaction found to remove"}

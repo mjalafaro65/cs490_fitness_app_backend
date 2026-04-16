@@ -14,5 +14,7 @@ class CoachReviews(db.Model):
     is_anonymous = db.Column(db.Boolean, default=False, nullable=False)
     is_flagged = db.Column(db.Boolean, default=False, nullable=False)
     is_visible = db.Column(db.Boolean, default=True, nullable=False)
+    helpful_count = db.Column(db.Integer, default=0, nullable=False)
+    unhelpful_count = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
