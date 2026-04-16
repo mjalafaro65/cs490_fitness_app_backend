@@ -10,6 +10,7 @@ from schemas.auth_schema import RegisterSchema, UserSetupSchema
 from flask import jsonify
 from models.coach_profiles import CoachProfiles # Ensure this path is correct
 from models import Users, ClientProfiles, CoachProfiles
+from .utils import create_notification
 
 auth_blp = Blueprint("Authentication", __name__, url_prefix="/auth", description="Operations for User Auth")
 
@@ -90,6 +91,13 @@ class UserSetup(MethodView):
 
             db.session.add(client_pf)
             db.session.commit()
+            
+            create_notification(
+                user_id=user.user_id,
+                type_slug="new-client",
+                title="Welcome to FitNet",
+                body=f"New profile has been set up {user.user_id}"
+            )
             return {"msg": "Setup successful", "auth_id": user.user_id}, 201 
     
         except Exception as e:

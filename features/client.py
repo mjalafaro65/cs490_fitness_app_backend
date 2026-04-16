@@ -244,13 +244,15 @@ class ClientHireRequestCreateView(MethodView):
     @client_blp.arguments(HireRequestCreateSchema)
     @client_blp.response(201, HireRequestStatusSchema)
     def post(self, data):
-        current_user_id = get_jwt_identity()
+        current_auth_id= get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         
         coach_profile_id = data["coach_profile_id"]
         payment_plan_id = data["payment_plan_id"]
         auto_pay_enabled = data.get("auto_pay_enabled", False)
 
-        print(f"DEBUG: Processing request for User {current_user_id} -> Coach {coach_profile_id}")
+        print(f"DEBUG: Processing request for User {user.user_id} -> Coach {coach_profile_id}")
 
         coach_profile = db.session.execute(
             select(CoachProfiles).where(
@@ -280,7 +282,7 @@ class ClientHireRequestCreateView(MethodView):
 
         existing_pending = db.session.execute(
             select(CoachHireRequests).where(
-                CoachHireRequests.client_user_id == current_user_id,
+                CoachHireRequests.client_user_id == user.user_id,
                 CoachHireRequests.coach_profile_id == coach_profile_id,
                 CoachHireRequests.status == "pending"
             )
@@ -290,7 +292,7 @@ class ClientHireRequestCreateView(MethodView):
             abort(409, description="Pending request already exists")
 
         new_request = CoachHireRequests(
-            client_user_id=current_user_id,
+            client_user_id=user.user_id,
             coach_profile_id=coach_profile_id,
             payment_plan_id=payment_plan_id,
             status="pending",
