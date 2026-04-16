@@ -17,11 +17,14 @@ class ProfileSchema(Schema):
     
     date_of_birth = fields.Date(format='%Y-%m-%d')
 
-    gender = fields.Str(
-        validate=validate.OneOf(["male", "female"]),
+    gender = fields.Method(
+        serialize="get_gender",
+        validate=validate.OneOf(['male', 'female', 'other', 'prefer_not_to_say']),
         required=False,
         allow_none=True
     )
+    def get_gender(self, obj):
+        return obj.gender.value if obj.gender else None
     
     bio = fields.Str(validate=validate.Length(max=500))
     profile_photo=fields.Str(required=False)
