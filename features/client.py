@@ -8,7 +8,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
-from models import ClientProfiles, CoachReviews
+from models import ClientProfiles, CoachProfiles, CoachReviews, ReviewInteractions, CoachFavorites
+from models.review_interactions import InteractionType
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -306,3 +307,92 @@ class EditReviewView(MethodView):
 
         db.session.commit()
         return review
+
+### Coach Favorites Management
+@client_blp.route("/favorites/coaches/<int:coach_id>")
+class CoachFavoriteView(MethodView):
+    @jwt_required()
+    def post(self, coach_id):
+        """Add coach to favorites (uses coach's user_id)"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        # Check if coach exists
+        coach = CoachProfiles.query.get(coach_id)
+        if not coach:
+            abort(404, description="Coach not found.")
+        
+        # Check if already favorited
+        existing_favorite = CoachFavorites.query.filter_by(
+            user_id=user.user_id, coach_profile_id=coach_id
+        ).first()
+        
+        if existing_favorite:
+            abort(400, description="Coach already favorited.")
+        
+        # Add to favorites
+        favorite = CoachFavorites(
+            user_id=user.user_id,
+            coach_profile_id=coach_id
+        )
+        db.session.add(favorite)
+        
+        try:
+            db.session.commit()
+            return {"message": "Coach added to favorites successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Database error: {str(e)}")
+    
+    @jwt_required()
+    def delete(self, coach_id):
+        """Remove coach from favorites"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        favorite = CoachFavorites.query.filter_by(
+            user_id=user.user_id, coach_profile_id=coach_id
+        ).first()
+        
+        if not favorite:
+            abort(404, description="Favorite not found.")
+        
+        db.session.delete(favorite)
+        
+        try:
+            db.session.commit()
+            return {"message": "Coach removed from favorites successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Database error: {str(e)}")
+
+@client_blp.route("/favorites/coaches")
+class FavoriteCoachesView(MethodView):
+    @jwt_required()
+    def get(self):
+        """Get user's favorite coaches"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+        
+        # Get favorite coach IDs
+        favorite_coach_ids = db.session.query(CoachFavorites.coach_profile_id).filter_by(
+            user_id=user.user_id
+        ).all()
+        
+        coach_ids = [fav[0] for fav in favorite_coach_ids]
+        
+        if not coach_ids:
+            return []
+        
+        # Get coach details
+        favorite_coaches = CoachProfiles.query.filter(
+            CoachProfiles.coach_profile_id.in_(coach_ids)
+        ).all()
+        
+        return favorite_coaches
