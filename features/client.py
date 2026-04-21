@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews,  ReviewInteractions
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -491,94 +491,368 @@ class EditReviewView(MethodView):
         db.session.commit()
         return review
 
+### Coach Favorites Management
+@client_blp.route("/favorites/coaches/<int:coach_id>")
+class CoachFavoriteView(MethodView):
+
+    @jwt_required()
+    def post(self, coach_id):
+        """Add coach to favorites"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if not user:
+            abort(404, description="User record not found.")
+
+        coach = CoachProfiles.query.get(coach_id)
+        if not coach:
+            abort(404, description="Coach not found.")
+
+        existing_favorite = CoachFavorites.query.filter_by(
+            user_id=user.user_id,
+            coach_profile_id=coach_id
+        ).first()
+
+        if existing_favorite:
+            abort(400, description="Coach already favorited.")
+
+        favorite = CoachFavorites(
+            user_id=user.user_id,
+            coach_profile_id=coach_id
+        )
+
+        db.session.add(favorite)
+
+        try:
+            db.session.commit()
+            return {"message": "Coach added to favorites successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+
+    @jwt_required()
+    def delete(self, coach_id):
+        """Remove coach from favorites"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if not user:
+            abort(404, description="User record not found.")
+
+        favorite = CoachFavorites.query.filter_by(
+            user_id=user.user_id,
+            coach_profile_id=coach_id
+        ).first()
+
+        if not favorite:
+            abort(404, description="Favorite not found.")
+
+        db.session.delete(favorite)
+
+        try:
+            db.session.commit()
+            return {"message": "Coach removed from favorites successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+
+
+@client_blp.route("/favorites/coaches")
+class FavoriteCoachesView(MethodView):
+
+    @jwt_required()
+    def get(self):
+        """Get user's favorite coaches"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if not user:
+            abort(404, description="User record not found.")
+
+        favorites = CoachFavorites.query.filter_by(
+            user_id=user.user_id
+        ).all()
+
+        coach_ids = [f.coach_profile_id for f in favorites]
+
+        if not coach_ids:
+            return []
+
+        return CoachProfiles.query.filter(
+            CoachProfiles.coach_profile_id.in_(coach_ids)
+        ).all()
+
+
 ### Review Interactions
 @client_blp.route("/reviews/<int:review_id>/interact")
 class ReviewInteractionView(MethodView):
+
     @jwt_required()
-    @client_blp.arguments({"interaction_type": {"type": "string", "required": True, "enum": ["helpful", "unhelpful"]}})
+    @client_blp.arguments({
+        "interaction_type": {
+            "type": "string",
+            "required": True,
+            "enum": ["helpful", "unhelpful"]
+        }
+    })
     def post(self, data, review_id):
-        """Add helpful/unhelpful reaction to review"""
+        """Add or update helpful/unhelpful reaction"""
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         if not user:
             abort(404, description="User record not found.")
-        
-        interaction_type = data['interaction_type']
-        
-        # Check if review exists
+
         review = CoachReviews.query.get(review_id)
         if not review:
             abort(404, description="Review not found.")
-        
-        # Check if user already interacted
+
+        interaction_type = data["interaction_type"]
+
         existing = ReviewInteractions.query.filter_by(
-            review_id=review_id, user_id=user.user_id
+            review_id=review_id,
+            user_id=user.user_id
         ).first()
-        
+
         if existing:
-            # Update existing interaction
             old_type = existing.interaction_type.value
-            existing.interaction_type = InteractionType(interaction_type)
-            
-            # Update counts based on change
-            if old_type == 'helpful':
+
+            # undo old count
+            if old_type == "helpful":
                 review.helpful_count -= 1
             else:
                 review.unhelpful_count -= 1
-                
-            if interaction_type == 'helpful':
-                review.helpful_count += 1
-            else:
-                review.unhelpful_count += 1
+
+            existing.interaction_type = InteractionType(interaction_type)
+
         else:
-            # Create new interaction
-            interaction = ReviewInteractions(
+            existing = ReviewInteractions(
                 review_id=review_id,
                 user_id=user.user_id,
                 interaction_type=InteractionType(interaction_type)
             )
-            db.session.add(interaction)
-            
-            # Update counts
-            if interaction_type == 'helpful':
-                review.helpful_count += 1
-            else:
-                review.unhelpful_count += 1
-        
+            db.session.add(existing)
+
+        # apply new count
+        if interaction_type == "helpful":
+            review.helpful_count += 1
+        else:
+            review.unhelpful_count += 1
+
         try:
             db.session.commit()
             return {"message": "Interaction recorded successfully"}
         except Exception as e:
             db.session.rollback()
-            abort(500, description=f"Database error: {str(e)}")
-    
+            abort(500, description=str(e))
+
     @jwt_required()
     def delete(self, review_id):
-        """Remove user's interaction from review"""
+        """Remove interaction from review"""
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         if not user:
             abort(404, description="User record not found.")
-        
+
         interaction = ReviewInteractions.query.filter_by(
-            review_id=review_id, user_id=user.user_id
+            review_id=review_id,
+            user_id=user.user_id
         ).first()
-        
-        if interaction:
-            # Update counts
-            review = CoachReviews.query.get(review_id)
-            if interaction.interaction_type.value == 'helpful':
-                review.helpful_count -= 1
-            else:
-                review.unhelpful_count -= 1
+
+        if not interaction:
+            return {"message": "No interaction found"}, 200
+
+        review = CoachReviews.query.get(review_id)
+
+        if interaction.interaction_type.value == "helpful":
+            review.helpful_count -= 1
+        else:
+            review.unhelpful_count -= 1
+
+        db.session.delete(interaction)
+
+        try:
+            db.session.commit()
+            return {"message": "Interaction removed successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
             
-            db.session.delete(interaction)
             
-            try:
-                db.session.commit()
-                return {"message": "Interaction removed successfully"}
-            except Exception as e:
-                db.session.rollback()
-                abort(500, description=f"Database error: {str(e)}")
+# <<<<<<< Coach-favorite-feature
+# ### Coach Favorites Management
+# @client_blp.route("/favorites/coaches/<int:coach_id>")
+# class CoachFavoriteView(MethodView):
+#     @jwt_required()
+#     def post(self, coach_id):
+#         """Add coach to favorites (uses coach's user_id)"""
+# =======
+# ### Review Interactions
+# @client_blp.route("/reviews/<int:review_id>/interact")
+# class ReviewInteractionView(MethodView):
+#     @jwt_required()
+#     @client_blp.arguments({"interaction_type": {"type": "string", "required": True, "enum": ["helpful", "unhelpful"]}})
+#     def post(self, data, review_id):
+#         """Add helpful/unhelpful reaction to review"""
+# >>>>>>> develop
+#         current_auth_id = get_jwt_identity()
+#         user = Users.query.filter_by(auth_id=current_auth_id).first()
+#         if not user:
+#             abort(404, description="User record not found.")
         
-        return {"message": "No interaction found to remove"}
+# <<<<<<< Coach-favorite-feature
+#         # Check if coach exists
+#         coach = CoachProfiles.query.get(coach_id)
+#         if not coach:
+#             abort(404, description="Coach not found.")
+        
+#         # Check if already favorited
+#         existing_favorite = CoachFavorites.query.filter_by(
+#             user_id=user.user_id, coach_profile_id=coach_id
+#         ).first()
+        
+#         if existing_favorite:
+#             abort(400, description="Coach already favorited.")
+        
+#         # Add to favorites
+#         favorite = CoachFavorites(
+#             user_id=user.user_id,
+#             coach_profile_id=coach_id
+#         )
+#         db.session.add(favorite)
+        
+#         try:
+#             db.session.commit()
+#             return {"message": "Coach added to favorites successfully"}
+# =======
+#         interaction_type = data['interaction_type']
+        
+#         # Check if review exists
+#         review = CoachReviews.query.get(review_id)
+#         if not review:
+#             abort(404, description="Review not found.")
+        
+#         # Check if user already interacted
+#         existing = ReviewInteractions.query.filter_by(
+#             review_id=review_id, user_id=user.user_id
+#         ).first()
+        
+#         if existing:
+#             # Update existing interaction
+#             old_type = existing.interaction_type.value
+#             existing.interaction_type = InteractionType(interaction_type)
+            
+#             # Update counts based on change
+#             if old_type == 'helpful':
+#                 review.helpful_count -= 1
+#             else:
+#                 review.unhelpful_count -= 1
+                
+#             if interaction_type == 'helpful':
+#                 review.helpful_count += 1
+#             else:
+#                 review.unhelpful_count += 1
+#         else:
+#             # Create new interaction
+#             interaction = ReviewInteractions(
+#                 review_id=review_id,
+#                 user_id=user.user_id,
+#                 interaction_type=InteractionType(interaction_type)
+#             )
+#             db.session.add(interaction)
+            
+#             # Update counts
+#             if interaction_type == 'helpful':
+#                 review.helpful_count += 1
+#             else:
+#                 review.unhelpful_count += 1
+        
+#         try:
+#             db.session.commit()
+#             return {"message": "Interaction recorded successfully"}
+# >>>>>>> develop
+#         except Exception as e:
+#             db.session.rollback()
+#             abort(500, description=f"Database error: {str(e)}")
+    
+#     @jwt_required()
+# <<<<<<< Coach-favorite-feature
+#     def delete(self, coach_id):
+#         """Remove coach from favorites"""
+# =======
+#     def delete(self, review_id):
+#         """Remove user's interaction from review"""
+# >>>>>>> develop
+#         current_auth_id = get_jwt_identity()
+#         user = Users.query.filter_by(auth_id=current_auth_id).first()
+#         if not user:
+#             abort(404, description="User record not found.")
+        
+# <<<<<<< Coach-favorite-feature
+#         favorite = CoachFavorites.query.filter_by(
+#             user_id=user.user_id, coach_profile_id=coach_id
+#         ).first()
+        
+#         if not favorite:
+#             abort(404, description="Favorite not found.")
+        
+#         db.session.delete(favorite)
+        
+#         try:
+#             db.session.commit()
+#             return {"message": "Coach removed from favorites successfully"}
+#         except Exception as e:
+#             db.session.rollback()
+#             abort(500, description=f"Database error: {str(e)}")
+
+# @client_blp.route("/favorites/coaches")
+# class FavoriteCoachesView(MethodView):
+#     @jwt_required()
+#     def get(self):
+#         """Get user's favorite coaches"""
+#         current_auth_id = get_jwt_identity()
+#         user = Users.query.filter_by(auth_id=current_auth_id).first()
+#         if not user:
+#             abort(404, description="User record not found.")
+        
+#         # Get favorite coach IDs
+#         favorite_coach_ids = db.session.query(CoachFavorites.coach_profile_id).filter_by(
+#             user_id=user.user_id
+#         ).all()
+        
+#         coach_ids = [fav[0] for fav in favorite_coach_ids]
+        
+#         if not coach_ids:
+#             return []
+        
+#         # Get coach details
+#         favorite_coaches = CoachProfiles.query.filter(
+#             CoachProfiles.coach_profile_id.in_(coach_ids)
+#         ).all()
+        
+#         return favorite_coaches
+# =======
+#         interaction = ReviewInteractions.query.filter_by(
+#             review_id=review_id, user_id=user.user_id
+#         ).first()
+        
+#         if interaction:
+#             # Update counts
+#             review = CoachReviews.query.get(review_id)
+#             if interaction.interaction_type.value == 'helpful':
+#                 review.helpful_count -= 1
+#             else:
+#                 review.unhelpful_count -= 1
+            
+#             db.session.delete(interaction)
+            
+#             try:
+#                 db.session.commit()
+#                 return {"message": "Interaction removed successfully"}
+#             except Exception as e:
+#                 db.session.rollback()
+#                 abort(500, description=f"Database error: {str(e)}")
+        
+#         return {"message": "No interaction found to remove"}
+# >>>>>>> develop

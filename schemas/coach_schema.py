@@ -79,6 +79,7 @@ class CoachBrowsingSchema(Schema):
     user_id=fields.Int(dump_only=True)
     specialty_name = fields.Str(dump_only=True)
     years_experience = fields.Int(dump_only=True)
+    is_favorited = fields.Bool(dump_only=True)
     bio = fields.Str(dump_only=True)
 
 
