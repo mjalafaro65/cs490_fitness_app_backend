@@ -6,7 +6,7 @@ from db import db
 from models import UserAuths, UserRoles, Roles, Users
 from middleware import roles_required 
 from schemas.user_schema import  UserInfoSchema, UserUpdateSchema, UserDeleteSchema
-from flask import jsonify
+from flask import jsonify, request
 from models.coach_profiles import CoachProfiles # Ensure this path is correct
 from models import Users, ClientProfiles, CoachProfiles, AccountDeletionInfo
 
@@ -37,7 +37,7 @@ class UserMeProfile(MethodView):
         return user
     
     @jwt_required()
-    def delete(self, data):
+    def delete(self):
         """
         Deletes the current user's account based on JWT identity
         """
@@ -45,10 +45,10 @@ class UserMeProfile(MethodView):
         
 
         user_auth=UserAuths.query.get_or_404(current_auth_id)
-
+        
+        data = request.get_json() or {}
         try:
             deletion_log = AccountDeletionInfo(
-                auth_id=current_auth_id,
                 reason=data.get("reason"),
                 detailed_reason=data.get("detailed_reason"))
             
@@ -57,7 +57,8 @@ class UserMeProfile(MethodView):
             db.session.delete(user_auth)
             db.session.commit()
             return {"msg": "Account successfully deleted"}, 200
-        except:
+        except Exception as e:
+            print(e)
             db.session.rollback()
             abort(500, description="Could not delete account")
 
