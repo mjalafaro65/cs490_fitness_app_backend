@@ -30,6 +30,7 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
         model = CoachProfiles
         load_instance = True
         include_fk = True
+        # exclude = ("specialty_id",)
         sqla_session = db.session
         name = "CoachProfileData"
 
@@ -43,6 +44,11 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
     flagged_at = fields.DateTime(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+    
+    specialty_id = fields.Int(required=True, load_only=True)
+    
+    specialty_name = fields.String(attribute="specialty.name", dump_only=True)
+    
 
 class CoachProfileQuerySchema(Schema):
     user_id = fields.Int()
@@ -70,10 +76,25 @@ class CoachBrowsingSchema(Schema):
     coach_profile_id = fields.Int(dump_only=True)
     first_name = fields.Str(dump_only=True)
     last_name = fields.Str(dump_only=True)
+    user_id=fields.Int(dump_only=True)
     specialty_name = fields.Str(dump_only=True)
     years_experience = fields.Int(dump_only=True)
     is_favorited = fields.Bool(dump_only=True)
     bio = fields.Str(dump_only=True)
+
+
+
+class PaymentPlanSchema(Schema):
+    payment_plan_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(required=True)
+    name = fields.Str(required=True)
+    billing_type = fields.Str(validate=validate.OneOf(['recurring', 'onetime']), required=True)
+    #billing_type = fields.Str(required=True)
+    amount = fields.Decimal(as_string=True, required=True)
+    is_active = fields.Bool(dump_only=True)
+    is_custom = fields.Bool(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+
 
 
 

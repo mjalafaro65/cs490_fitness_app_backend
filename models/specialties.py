@@ -12,3 +12,5 @@ class Specialties(db.Model):
     specialty_id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), unique=True, nullable=False)
     coach_type = db.Column(db.Enum(CoachTypeEnum), nullable=False)
+    
+    

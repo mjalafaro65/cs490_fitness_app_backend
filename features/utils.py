@@ -14,4 +14,9 @@ def create_notification(user_id=None, role_id=None, type_slug=None, title=None, 
             title=title,
             body=body
         )
+    
+        print(new_notif)
         db.session.add(new_notif)
+        db.session.commit()
+
+        

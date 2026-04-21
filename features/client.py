@@ -3,13 +3,14 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
-from schemas.client_schema import DailySurveySchema, ProfileSchema, ReviewCoachSchema
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
+from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
 from models.daily_survey import DailySurvey
-from models import ClientProfiles, CoachProfiles, CoachReviews, ReviewInteractions, CoachFavorites
 from models.review_interactions import InteractionType
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -230,6 +231,176 @@ class EditDailyView(MethodView):
             db.session.rollback()
             abort(500, description="Failed to update the daily log.")
 
+
+
+
+@client_blp.route("/coach-payment-plans")
+class ClientPaymentPlanListView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, PaymentPlanSchema(many=True))
+    def get(self):
+        plans = PaymentPlans.query.join(
+            CoachProfiles,
+            PaymentPlans.coach_profile_id == CoachProfiles.coach_profile_id
+        ).filter(
+            PaymentPlans.is_active == True,
+            CoachProfiles.status == "approved"
+        ).all()
+
+        return plans
+
+
+
+
+@client_blp.route("/hire-request")
+class ClientHireRequestCreateView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(HireRequestCreateSchema)
+    @client_blp.response(201, HireRequestStatusSchema)
+    def post(self, data):
+        current_auth_id= get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        
+        coach_profile_id = data["coach_profile_id"]
+        payment_plan_id = data["payment_plan_id"]
+        auto_pay_enabled = data.get("auto_pay_enabled", False)
+
+        print(f"DEBUG: Processing request for User {user.user_id} -> Coach {coach_profile_id}")
+
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(
+                CoachProfiles.coach_profile_id == coach_profile_id
+            )
+        ).scalar_one_or_none()
+
+        if not coach_profile:
+            abort(404, description="Coach profile not found")
+
+        status_str = str(coach_profile.status).lower()
+        if "approved" not in status_str:
+            print(f"FAILED: Coach status is '{status_str}'")
+            abort(400, description="Coach is not available")
+
+        payment_plan = db.session.execute(
+            select(PaymentPlans).where(
+                PaymentPlans.payment_plan_id == payment_plan_id
+            )
+        ).scalar_one_or_none()
+
+        if not payment_plan:
+            abort(404, description="Payment plan not found")
+
+        if payment_plan.coach_profile_id != coach_profile_id:
+            abort(400, description="Invalid payment plan for this coach")
+
+        existing_pending = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.client_user_id == user.user_id,
+                CoachHireRequests.coach_profile_id == coach_profile_id,
+                CoachHireRequests.status == "pending"
+            )
+        ).scalar_one_or_none()
+
+        if existing_pending:
+            abort(409, description="Pending request already exists")
+
+        new_request = CoachHireRequests(
+            client_user_id=user.user_id,
+            coach_profile_id=coach_profile_id,
+            payment_plan_id=payment_plan_id,
+            status="pending",
+            auto_pay_enabled=auto_pay_enabled
+        )
+
+        try:
+            db.session.add(new_request)
+            db.session.commit()
+            db.session.refresh(new_request) 
+            print(f"SUCCESS: Created Request ID {new_request.request_id}")
+            return new_request
+        except Exception as e:
+            db.sesssion.rollback()
+            print(f"DATABASE ERROR: {str(e)}")
+            abort(500, description="Internal database error")
+
+
+
+@client_blp.route("/hire-request/<int:request_id>")
+class ClientHireRequestDetailView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, HireRequestStatusSchema)
+    def delete(self, request_id):
+        current_user_id = get_jwt_identity()
+
+        hire_request = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.request_id == request_id
+            )
+        ).scalar_one_or_none()
+
+        if not hire_request:
+            abort(404, description="Hire request not found")
+
+        if int(hire_request.client_user_id) != int(current_user_id):
+            abort(403, description="Not your request")
+
+        current_status_str = str(hire_request.status).lower()
+
+        if "pending" not in current_status_str:
+            abort(400, description=f"Only pending requests can be canceled. Current: {current_status_str}")
+
+        try:
+            hire_request.status = "canceled"
+            
+            db.session.commit()
+            print(f"SUCCESS: Request {request_id} set to canceled")
+            return hire_request
+        except Exception as e:
+            db.session.rollback()
+            print(f"COMMIT ERROR: {str(e)}")
+            abort(500, description="Could not update status.")
+    
+
+
+@client_blp.route("/hire-requests")
+class ClientHireRequestListView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, HireRequestListSchema(many=True))
+    def get(self):
+        current_user_id = get_jwt_identity()
+
+        requests = db.session.execute(
+            select(CoachHireRequests)
+            .where(CoachHireRequests.client_user_id == current_user_id)
+            .order_by(CoachHireRequests.created_at.desc())
+        ).scalars().all()
+
+        return requests
+    
+
+
+
+@client_blp.route("/hire-request/<int:request_id>/status")
+class ClientHireRequestStatusView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, HireRequestStatusSchema)
+    def get(self, request_id):
+        current_user_id = get_jwt_identity()
+
+        hire_request = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.request_id == request_id
+            )
+        ).scalar_one_or_none()
+
+        if not hire_request:
+            abort(404, description="Hire request not found")
+
+        if int(hire_request.client_user_id) != int(current_user_id):
+            abort(403, description="Not allowed")
+
+        return hire_request
 ### Client Reviews Coach
 @client_blp.route("/review-coach/<int:coach_id>")
 class ReviewCoachView(MethodView):
@@ -251,6 +422,7 @@ class ReviewCoachView(MethodView):
             coach_profile_id=coach_id,
             client_user_id=user.user_id
         ).first()
+        print(existing_review)
 
         if existing_review:
             abort(400, description="You have already submitted a review for this coach.")
@@ -281,7 +453,17 @@ class ClientReviewsView(MethodView):
         if not user:
             abort(404, description="User record not found.")
         
-        return CoachReviews.query.filter_by(client_user_id=user.user_id).all()
+        reviews = CoachReviews.query.filter_by(client_user_id=user.user_id).all()
+        
+        # Add interaction counts and user's interaction to each review
+        for review in reviews:
+            # Get user's interaction for this review
+            user_interaction = ReviewInteractions.query.filter_by(
+                review_id=review.review_id, user_id=user.user_id
+            ).first()
+            review.user_interaction = user_interaction.interaction_type.value if user_interaction else None
+        
+        return reviews
 
 ### Editing Client's own review
 @client_blp.route("/my-reviews/<int:review_id>")
@@ -291,6 +473,7 @@ class EditReviewView(MethodView):
     @client_blp.response(200, ReviewCoachSchema)
     def patch(self, data, review_id):
         current_auth_id = get_jwt_identity()
+        
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         if not user:
             abort(404, description="User record not found.")
@@ -311,88 +494,365 @@ class EditReviewView(MethodView):
 ### Coach Favorites Management
 @client_blp.route("/favorites/coaches/<int:coach_id>")
 class CoachFavoriteView(MethodView):
+
     @jwt_required()
     def post(self, coach_id):
-        """Add coach to favorites (uses coach's user_id)"""
+        """Add coach to favorites"""
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         if not user:
             abort(404, description="User record not found.")
-        
-        # Check if coach exists
+
         coach = CoachProfiles.query.get(coach_id)
         if not coach:
             abort(404, description="Coach not found.")
-        
-        # Check if already favorited
+
         existing_favorite = CoachFavorites.query.filter_by(
-            user_id=user.user_id, coach_profile_id=coach_id
+            user_id=user.user_id,
+            coach_profile_id=coach_id
         ).first()
-        
+
         if existing_favorite:
             abort(400, description="Coach already favorited.")
-        
-        # Add to favorites
+
         favorite = CoachFavorites(
             user_id=user.user_id,
             coach_profile_id=coach_id
         )
+
         db.session.add(favorite)
-        
+
         try:
             db.session.commit()
             return {"message": "Coach added to favorites successfully"}
         except Exception as e:
             db.session.rollback()
-            abort(500, description=f"Database error: {str(e)}")
-    
+            abort(500, description=str(e))
+
     @jwt_required()
     def delete(self, coach_id):
         """Remove coach from favorites"""
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         if not user:
             abort(404, description="User record not found.")
-        
+
         favorite = CoachFavorites.query.filter_by(
-            user_id=user.user_id, coach_profile_id=coach_id
+            user_id=user.user_id,
+            coach_profile_id=coach_id
         ).first()
-        
+
         if not favorite:
             abort(404, description="Favorite not found.")
-        
+
         db.session.delete(favorite)
-        
+
         try:
             db.session.commit()
             return {"message": "Coach removed from favorites successfully"}
         except Exception as e:
             db.session.rollback()
-            abort(500, description=f"Database error: {str(e)}")
+            abort(500, description=str(e))
+
 
 @client_blp.route("/favorites/coaches")
 class FavoriteCoachesView(MethodView):
+
     @jwt_required()
     def get(self):
         """Get user's favorite coaches"""
         current_auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         if not user:
             abort(404, description="User record not found.")
-        
-        # Get favorite coach IDs
-        favorite_coach_ids = db.session.query(CoachFavorites.coach_profile_id).filter_by(
+
+        favorites = CoachFavorites.query.filter_by(
             user_id=user.user_id
         ).all()
-        
-        coach_ids = [fav[0] for fav in favorite_coach_ids]
-        
+
+        coach_ids = [f.coach_profile_id for f in favorites]
+
         if not coach_ids:
             return []
-        
-        # Get coach details
-        favorite_coaches = CoachProfiles.query.filter(
+
+        return CoachProfiles.query.filter(
             CoachProfiles.coach_profile_id.in_(coach_ids)
         ).all()
+
+
+### Review Interactions
+@client_blp.route("/reviews/<int:review_id>/interact")
+class ReviewInteractionView(MethodView):
+
+    @jwt_required()
+    @client_blp.arguments({
+        "interaction_type": {
+            "type": "string",
+            "required": True,
+            "enum": ["helpful", "unhelpful"]
+        }
+    })
+    def post(self, data, review_id):
+        """Add or update helpful/unhelpful reaction"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if not user:
+            abort(404, description="User record not found.")
+
+        review = CoachReviews.query.get(review_id)
+        if not review:
+            abort(404, description="Review not found.")
+
+        interaction_type = data["interaction_type"]
+
+        existing = ReviewInteractions.query.filter_by(
+            review_id=review_id,
+            user_id=user.user_id
+        ).first()
+
+        if existing:
+            old_type = existing.interaction_type.value
+
+            # undo old count
+            if old_type == "helpful":
+                review.helpful_count -= 1
+            else:
+                review.unhelpful_count -= 1
+
+            existing.interaction_type = InteractionType(interaction_type)
+
+        else:
+            existing = ReviewInteractions(
+                review_id=review_id,
+                user_id=user.user_id,
+                interaction_type=InteractionType(interaction_type)
+            )
+            db.session.add(existing)
+
+        # apply new count
+        if interaction_type == "helpful":
+            review.helpful_count += 1
+        else:
+            review.unhelpful_count += 1
+
+        try:
+            db.session.commit()
+            return {"message": "Interaction recorded successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+
+    @jwt_required()
+    def delete(self, review_id):
+        """Remove interaction from review"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        if not user:
+            abort(404, description="User record not found.")
+
+        interaction = ReviewInteractions.query.filter_by(
+            review_id=review_id,
+            user_id=user.user_id
+        ).first()
+
+        if not interaction:
+            return {"message": "No interaction found"}, 200
+
+        review = CoachReviews.query.get(review_id)
+
+        if interaction.interaction_type.value == "helpful":
+            review.helpful_count -= 1
+        else:
+            review.unhelpful_count -= 1
+
+        db.session.delete(interaction)
+
+        try:
+            db.session.commit()
+            return {"message": "Interaction removed successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+            
+            
+# <<<<<<< Coach-favorite-feature
+# ### Coach Favorites Management
+# @client_blp.route("/favorites/coaches/<int:coach_id>")
+# class CoachFavoriteView(MethodView):
+#     @jwt_required()
+#     def post(self, coach_id):
+#         """Add coach to favorites (uses coach's user_id)"""
+# =======
+# ### Review Interactions
+# @client_blp.route("/reviews/<int:review_id>/interact")
+# class ReviewInteractionView(MethodView):
+#     @jwt_required()
+#     @client_blp.arguments({"interaction_type": {"type": "string", "required": True, "enum": ["helpful", "unhelpful"]}})
+#     def post(self, data, review_id):
+#         """Add helpful/unhelpful reaction to review"""
+# >>>>>>> develop
+#         current_auth_id = get_jwt_identity()
+#         user = Users.query.filter_by(auth_id=current_auth_id).first()
+#         if not user:
+#             abort(404, description="User record not found.")
         
-        return favorite_coaches
+# <<<<<<< Coach-favorite-feature
+#         # Check if coach exists
+#         coach = CoachProfiles.query.get(coach_id)
+#         if not coach:
+#             abort(404, description="Coach not found.")
+        
+#         # Check if already favorited
+#         existing_favorite = CoachFavorites.query.filter_by(
+#             user_id=user.user_id, coach_profile_id=coach_id
+#         ).first()
+        
+#         if existing_favorite:
+#             abort(400, description="Coach already favorited.")
+        
+#         # Add to favorites
+#         favorite = CoachFavorites(
+#             user_id=user.user_id,
+#             coach_profile_id=coach_id
+#         )
+#         db.session.add(favorite)
+        
+#         try:
+#             db.session.commit()
+#             return {"message": "Coach added to favorites successfully"}
+# =======
+#         interaction_type = data['interaction_type']
+        
+#         # Check if review exists
+#         review = CoachReviews.query.get(review_id)
+#         if not review:
+#             abort(404, description="Review not found.")
+        
+#         # Check if user already interacted
+#         existing = ReviewInteractions.query.filter_by(
+#             review_id=review_id, user_id=user.user_id
+#         ).first()
+        
+#         if existing:
+#             # Update existing interaction
+#             old_type = existing.interaction_type.value
+#             existing.interaction_type = InteractionType(interaction_type)
+            
+#             # Update counts based on change
+#             if old_type == 'helpful':
+#                 review.helpful_count -= 1
+#             else:
+#                 review.unhelpful_count -= 1
+                
+#             if interaction_type == 'helpful':
+#                 review.helpful_count += 1
+#             else:
+#                 review.unhelpful_count += 1
+#         else:
+#             # Create new interaction
+#             interaction = ReviewInteractions(
+#                 review_id=review_id,
+#                 user_id=user.user_id,
+#                 interaction_type=InteractionType(interaction_type)
+#             )
+#             db.session.add(interaction)
+            
+#             # Update counts
+#             if interaction_type == 'helpful':
+#                 review.helpful_count += 1
+#             else:
+#                 review.unhelpful_count += 1
+        
+#         try:
+#             db.session.commit()
+#             return {"message": "Interaction recorded successfully"}
+# >>>>>>> develop
+#         except Exception as e:
+#             db.session.rollback()
+#             abort(500, description=f"Database error: {str(e)}")
+    
+#     @jwt_required()
+# <<<<<<< Coach-favorite-feature
+#     def delete(self, coach_id):
+#         """Remove coach from favorites"""
+# =======
+#     def delete(self, review_id):
+#         """Remove user's interaction from review"""
+# >>>>>>> develop
+#         current_auth_id = get_jwt_identity()
+#         user = Users.query.filter_by(auth_id=current_auth_id).first()
+#         if not user:
+#             abort(404, description="User record not found.")
+        
+# <<<<<<< Coach-favorite-feature
+#         favorite = CoachFavorites.query.filter_by(
+#             user_id=user.user_id, coach_profile_id=coach_id
+#         ).first()
+        
+#         if not favorite:
+#             abort(404, description="Favorite not found.")
+        
+#         db.session.delete(favorite)
+        
+#         try:
+#             db.session.commit()
+#             return {"message": "Coach removed from favorites successfully"}
+#         except Exception as e:
+#             db.session.rollback()
+#             abort(500, description=f"Database error: {str(e)}")
+
+# @client_blp.route("/favorites/coaches")
+# class FavoriteCoachesView(MethodView):
+#     @jwt_required()
+#     def get(self):
+#         """Get user's favorite coaches"""
+#         current_auth_id = get_jwt_identity()
+#         user = Users.query.filter_by(auth_id=current_auth_id).first()
+#         if not user:
+#             abort(404, description="User record not found.")
+        
+#         # Get favorite coach IDs
+#         favorite_coach_ids = db.session.query(CoachFavorites.coach_profile_id).filter_by(
+#             user_id=user.user_id
+#         ).all()
+        
+#         coach_ids = [fav[0] for fav in favorite_coach_ids]
+        
+#         if not coach_ids:
+#             return []
+        
+#         # Get coach details
+#         favorite_coaches = CoachProfiles.query.filter(
+#             CoachProfiles.coach_profile_id.in_(coach_ids)
+#         ).all()
+        
+#         return favorite_coaches
+# =======
+#         interaction = ReviewInteractions.query.filter_by(
+#             review_id=review_id, user_id=user.user_id
+#         ).first()
+        
+#         if interaction:
+#             # Update counts
+#             review = CoachReviews.query.get(review_id)
+#             if interaction.interaction_type.value == 'helpful':
+#                 review.helpful_count -= 1
+#             else:
+#                 review.unhelpful_count -= 1
+            
+#             db.session.delete(interaction)
+            
+#             try:
+#                 db.session.commit()
+#                 return {"message": "Interaction removed successfully"}
+#             except Exception as e:
+#                 db.session.rollback()
+#                 abort(500, description=f"Database error: {str(e)}")
+        
+#         return {"message": "No interaction found to remove"}
+# >>>>>>> develop
