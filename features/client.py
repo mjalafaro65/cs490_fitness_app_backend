@@ -4,6 +4,7 @@ from flask_smorest import Blueprint
 from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
+from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
 from models.invoices import Invoices
 
@@ -589,6 +590,7 @@ class CoachFavoriteView(MethodView):
 class FavoriteCoachesView(MethodView):
 
     @jwt_required()
+    @client_blp.response(200, CoachProfileSchema(many=True) )
     def get(self):
         """Get user's favorite coaches"""
         current_auth_id = get_jwt_identity()
