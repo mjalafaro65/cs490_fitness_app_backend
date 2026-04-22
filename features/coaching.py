@@ -189,17 +189,13 @@ class CoachProfileView(MethodView):
         if not curr_user_id:
             abort(401, description="User not found.")
 
-        is_admin=db.session.query(UserRoles).join(Roles).filter(
-            UserRoles.user_id ==curr_auth_id,
-            Roles.name =="admin"
-        ).first() is not None
-
+       
         target_user_id = args.get("user_id")
 
         #if target id is provided check if its the logged in user
         #######need to check if its admin or client doing the call
         print(target_user_id, curr_user_id)
-        if target_user_id and target_user_id != curr_user_id and is_admin:
+        if target_user_id and target_user_id != curr_user_id:
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
         
