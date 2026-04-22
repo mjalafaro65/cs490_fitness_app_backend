@@ -1,4 +1,6 @@
 from marshmallow import Schema, fields, validate
+from .coach_schema import CoachProfileSchema, PaymentPlanSchema
+ 
 
 class DailySurveySchema(Schema):
     survey_id = fields.Int(dump_only=True)
@@ -51,12 +53,16 @@ class HireRequestStatusSchema(Schema):
     created_at = fields.DateTime()
     decided_at = fields.DateTime(allow_none=True)
 
+    # status = fields.Function(lambda obj: obj.status.value)
+    
+
 
 class HireRequestListSchema(Schema):
     request_id = fields.Int()
     coach_profile_id = fields.Int()
     payment_plan_id = fields.Int(allow_none=True)
-    status = fields.Str()
+    status = fields.Function(lambda obj: obj.status.value)
+
     auto_pay_enabled = fields.Bool()
     created_at = fields.DateTime()
     decided_at = fields.DateTime(allow_none=True)

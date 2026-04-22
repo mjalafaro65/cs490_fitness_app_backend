@@ -32,4 +32,3 @@ class CoachProfiles(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     specialty = db.relationship("Specialties")
-    

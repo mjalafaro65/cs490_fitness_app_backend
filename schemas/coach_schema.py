@@ -31,7 +31,6 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
         # exclude = ("specialty_id",)
-        sqla_session = db.session
         name = "CoachProfileData"
 
     user_id = fields.Int(dump_only=True)
@@ -89,7 +88,7 @@ class PaymentPlanSchema(Schema):
     coach_profile_id = fields.Int(required=True)
     name = fields.Str(required=True)
     billing_type = fields.Str(validate=validate.OneOf(['recurring', 'onetime']), required=True)
-    #billing_type = fields.Str(required=True)
+    billing_type = fields.Function(lambda obj: obj.billing_type.value)
     amount = fields.Decimal(as_string=True, required=True)
     is_active = fields.Bool(dump_only=True)
     is_custom = fields.Bool(dump_only=True)

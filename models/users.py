@@ -56,7 +56,6 @@ class Users(db.Model):
     )
     meal_logs = db.relationship(
         "MealLogs",
-        cascade="all, delete-orphan"
     )
     # meal_plan_assignments = db.relationship(
     #     "MealPlanAssignments",
@@ -65,7 +64,6 @@ class Users(db.Model):
     # )
     meal_plans = db.relationship(
         "MealPlans",
-        cascade="all, delete-orphan"
     )
     # messages = db.relationship(
     #     "Messages",
@@ -73,7 +71,6 @@ class Users(db.Model):
     # )
     notifications = db.relationship(
         "Notifications",
-        cascade="all, delete-orphan"
     )
     # payment_methods = db.relationship(
     #     "PaymentMethods",
@@ -112,7 +109,6 @@ class Users(db.Model):
     # )
     workout_logs = db.relationship(
         "WorkoutLogs",
-        cascade="all, delete-orphan"
     )
     # workout_plan_assignments_assigned_to = db.relationship(
     #     "WorkoutPlanAssignments",
