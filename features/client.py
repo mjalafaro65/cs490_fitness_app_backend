@@ -3,12 +3,19 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
-from schemas.client_schema import DailySurveySchema, ProfileSchema 
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, ReportCoachSchema, RelationshipTerminationSchema, ProgressAnalyticsSchema
+from models.coach_client_relationships import CoachClientRelationships, status_enum
+from models.invoices import Invoices
+from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import select
 from models import Users
+from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
-from models import ClientProfiles
+from models.review_interactions import InteractionType
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
+from datetime import datetime, timezone
+
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 

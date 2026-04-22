@@ -1,6 +1,9 @@
 from marshmallow import Schema, fields, validate
+from models.coach_client_relationships import status_enum
 
 class DailySurveySchema(Schema):
+    survey_id = fields.Int(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
     daily_goal = fields.Str(required=False, allow_none=True)
     energy_level = fields.Int(required=False, allow_none=True)
     target_focus = fields.Str(required=False, allow_none=True)
@@ -28,3 +31,59 @@ class ProfileSchema(Schema):
     
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+
+class HireRequestCreateSchema(Schema):
+    coach_profile_id = fields.Int(required=True)
+    payment_plan_id = fields.Int(required=True)
+    auto_pay_enabled = fields.Bool(load_default=False)
+
+
+class HireRequestStatusSchema(Schema):
+    request_id = fields.Int()
+    client_user_id = fields.Int()
+    coach_profile_id = fields.Int()
+    payment_plan_id = fields.Int(allow_none=True)
+    status = fields.Str()
+    auto_pay_enabled = fields.Bool()
+    created_at = fields.DateTime()
+    decided_at = fields.DateTime(allow_none=True)
+
+
+class HireRequestListSchema(Schema):
+    request_id = fields.Int()
+    coach_profile_id = fields.Int()
+    payment_plan_id = fields.Int(allow_none=True)
+    status = fields.Str()
+    auto_pay_enabled = fields.Bool()
+    created_at = fields.DateTime()
+    decided_at = fields.DateTime(allow_none=True)
+
+class ReviewCoachSchema(Schema):
+    ### For editing reviews
+    review_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+    ### For creating reviews
+    rating = fields.Int(required=True, validate=validate.Range(min=1, max=100))
+    comment = fields.Str(validate=validate.Length(max=1000))
+
+class ReportCoachSchema(Schema):
+    report_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(required=True)
+    reported_by_user_id = fields.Int(dump_only=True)
+    reason = fields.Str(required=True, validate=validate.Length(min=10))
+    created_at = fields.DateTime(dump_only=True)
+
+### 
+class RelationshipTerminationSchema(Schema):
+    relationship_id = fields.Int(required=True)
+    payment_plan_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+    client_profile_id = fields.Int(dump_only=True)
+    status = fields.Enum(status_enum, dump_default=status_enum.terminated)
+    reason = fields.Str(required=True, validate=validate.Length(min=10))
+    ended_at = fields.DateTime(dump_only=True)
+
+class ProgressAnalyticsSchema(Schema):
+    user_id = fields.Int(dump_only=True)
+    history = fields.List(fields.Nested(DailySurveySchema), dump_only=True)

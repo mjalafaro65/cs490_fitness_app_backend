@@ -19,4 +19,4 @@ class Invoices(db.Model):
     subtotal = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     issued_at = db.Column(db.DateTime, nullable=True)
-    paid_at = db.Column(db.DateTime, nullable=True)
+    pay_date = db.Column(db.DateTime, nullable=True)
