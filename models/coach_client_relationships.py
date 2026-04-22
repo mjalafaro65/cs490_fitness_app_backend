@@ -21,4 +21,4 @@ class CoachClientRelationships(db.Model):
     status = db.Column(db.Enum(status_enum), default=status_enum.active)
     termination_reason = db.Column(db.String(255))
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
-    ended_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ended_at = db.Column(db.DateTime,  nullable=True, default=datetime.utcnow)

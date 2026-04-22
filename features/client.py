@@ -4,12 +4,18 @@ from flask_smorest import Blueprint
 from db import db
 from datetime import date
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
+from models.coach_client_relationships import CoachClientRelationships, status_enum
+from models.invoices import Invoices
+
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
 from models import Users
+from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
+from datetime import datetime, timezone
+
 from models.coach_hire_requests import StatusEnum
 from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
 

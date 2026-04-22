@@ -1,5 +1,8 @@
 from marshmallow import Schema, fields, validate
+from models.coach_client_relationships import status_enum
 from .coach_schema import CoachProfileSchema, PaymentPlanSchema
+
+
  
 
 class DailySurveySchema(Schema):
@@ -7,7 +10,7 @@ class DailySurveySchema(Schema):
     daily_goal = fields.Str(required=False, allow_none=True)
     energy_level = fields.Int(required=False, allow_none=True)
     target_focus = fields.Str(required=False, allow_none=True)
-    
+    created_at = fields.DateTime(dump_only=True)
     water_oz = fields.Float(required=False, allow_none=True)
     weight_lbs = fields.Float(required=False, allow_none=True)
     sleep_hours = fields.Float(required=False, allow_none=True)
@@ -62,10 +65,11 @@ class HireRequestListSchema(Schema):
     coach_profile_id = fields.Int()
     payment_plan_id = fields.Int(allow_none=True)
     status = fields.Function(lambda obj: obj.status.value)
-
     auto_pay_enabled = fields.Bool()
     created_at = fields.DateTime()
     decided_at = fields.DateTime(allow_none=True)
+    
+    
 class ReviewCoachSchema(Schema):
     ### For editing reviews
     review_id = fields.Int(dump_only=True)
@@ -77,3 +81,25 @@ class ReviewCoachSchema(Schema):
     unhelpful_count = fields.Int(dump_only=True)
     user_interaction = fields.Str(dump_only=True)
 
+
+class ReportCoachSchema(Schema):
+    report_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(required=True)
+    reported_by_user_id = fields.Int(dump_only=True)
+    reason = fields.Str(required=True, validate=validate.Length(min=10))
+    created_at = fields.DateTime(dump_only=True)
+
+### 
+class RelationshipTerminationSchema(Schema):
+    relationship_id = fields.Int(required=True)
+    payment_plan_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+    client_profile_id = fields.Int(dump_only=True)
+    status = fields.Enum(status_enum, dump_default=status_enum.terminated)
+    reason = fields.Str(required=True, validate=validate.Length(min=10))
+    ended_at = fields.DateTime(dump_only=True)
+
+class ProgressAnalyticsSchema(Schema):
+    user_id = fields.Int(dump_only=True)
+    history = fields.List(fields.Nested(DailySurveySchema), dump_only=True)
+    
