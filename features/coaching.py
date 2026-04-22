@@ -189,17 +189,24 @@ class CoachProfileView(MethodView):
         if not curr_user_id:
             abort(401, description="User not found.")
 
-        target_user_id = args.get("user_id") or None
+        is_admin=db.session.query(UserRoles).join(Roles).filter(
+            UserRoles.user_id ==curr_auth_id,
+            Roles.name =="admin"
+        ).first() is not None
+
+        target_user_id = args.get("user_id")
 
         #if target id is provided check if its the logged in user
         #######need to check if its admin or client doing the call
         print(target_user_id, curr_user_id)
-        if target_user_id and target_user_id != curr_user_id:
+        if target_user_id and target_user_id != curr_user_id and is_admin:
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
         
         else:
             profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
+        
+        print(profile)
 
         if not profile:
             return {"message":"Coach profile not found."}, 404
@@ -235,28 +242,35 @@ class CoachProfileView(MethodView):
         except Exception as e:
             db.session.rollback()
             print(f"DEBUG: Database Error: {str(e)}") 
-            abort(500, message="Database error occurred during profile creation.") 
+            abort(500, description="Database error occurred during profile creation.") 
     
     @jwt_required()
+    @coach_blp.arguments(CoachProfileQuerySchema, location="query")
     @coach_blp.arguments(CoachProfileSchema(partial=True,load_instance=False))
     @coach_blp.response(200, CoachProfileSchema)
-    def patch(self,updated_data):
+    def patch(self , query_args,updated_data):
         """
         Update existing profile. partial=True allows updating just one field.
         """
         curr_auth_id = get_jwt_identity()
         curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
 
-        target_user_id = updated_data.pop("user_id", None) or curr_user_id
 
         #look at role
         is_admin = db.session.query(UserRoles).join(Roles).filter(
                 UserRoles.user_id == curr_auth_id,
                 Roles.name == 'admin'
-        ).first()
-
+        ).first() is not None
+        
+       
+        
+        target_user_id = query_args.get("user_id") 
+        if target_user_id is None:
+            target_user_id = curr_user_id
+            
+            
         #if its not user or admin 
-        if int(target_user_id) != int(curr_user_id) and not is_admin:
+        if target_user_id != curr_user_id and not is_admin:
             abort(403, description="Unauthorized to edit this profile.")
 
         profile = CoachProfiles.query.filter_by(user_id=target_user_id).first_or_404()    
@@ -278,10 +292,11 @@ class CoachProfileView(MethodView):
             
             if key == "status":
                 current_status_upper = profile.status.lower()
-                val_upper = value.lower() if isinstance(value, str) else value
+                new_val = value.lower() if isinstance(value, str) else value
                 if is_admin:
                     setattr(profile, key, value)
-                    if val_upper == ApprovalStatusEnum.approved:
+                    
+                    if new_val == ApprovalStatusEnum.approved:
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
                         
@@ -291,7 +306,7 @@ class CoachProfileView(MethodView):
                             title="Application Approved!",
                             body="Congratulations! Your coach profile is now live."
                         )
-                elif val_upper == ApprovalStatusEnum.switched or current_status_upper == ApprovalStatusEnum.switched:
+                elif new_val == ApprovalStatusEnum.switched or current_status_upper == ApprovalStatusEnum.switched:
                     setattr(profile, key, value)
                     
                 else:
