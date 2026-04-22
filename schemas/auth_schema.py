@@ -1,4 +1,6 @@
 from marshmallow import Schema, fields, validate
+from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+from models import Users
 
 class RegisterSchema(Schema):
     email = fields.Email(required=True)
@@ -17,10 +19,11 @@ class UserSetupSchema(Schema):
     gender = fields.Str(
         required=False, 
         allow_none=True,
-        validate=validate.OneOf(['male', 'female', 'other',"prefer_not_to_say"])
+        validate=validate.OneOf(['male', 'female', 'other','prefer_not_to_say'])
     )
     height = fields.Float(required=False, allow_none=True)
     weight = fields.Float(required=False, allow_none=True)
 
     # read-only output
     user_id = fields.Int(dump_only=True)
+    

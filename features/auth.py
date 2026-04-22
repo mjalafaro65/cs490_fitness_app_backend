@@ -5,12 +5,12 @@ from flask_smorest import Blueprint, abort
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from db import db
 from models import UserAuths, UserRoles, Roles, Users
-from models import Notifications, NotificationTypes
 from middleware import roles_required 
 from schemas.auth_schema import RegisterSchema, UserSetupSchema
 from flask import jsonify
 from models.coach_profiles import CoachProfiles # Ensure this path is correct
 from models import Users, ClientProfiles, CoachProfiles
+from .utils import create_notification
 
 auth_blp = Blueprint("Authentication", __name__, url_prefix="/auth", description="Operations for User Auth")
 
@@ -59,6 +59,7 @@ class UserSetup(MethodView):
         current_auth_id=get_jwt_identity()
 
         #not client 
+        print(current_auth_id)
         auth_rol_re=UserRoles.query.filter_by(user_id=current_auth_id, role_id=1).first()
 
         if not auth_rol_re:
@@ -67,8 +68,9 @@ class UserSetup(MethodView):
         
         #handle users table
         existing_user=Users.query.filter_by(auth_id=current_auth_id).first()
+                                        
 
-        if  existing_user: 
+        if existing_user: 
             return {"msg":"Client profile exists"},400
             
         user_info = {
@@ -80,15 +82,22 @@ class UserSetup(MethodView):
         try:
             #create user table, dont commit
             user=Users(auth_id=current_auth_id,**user_info)
+                
             db.session.add(user)
             db.session.flush()
                 
-
+             
             client_pf=ClientProfiles(client_id=user.user_id, **data)
 
             db.session.add(client_pf)
-        
             db.session.commit()
+            
+            create_notification(
+                user_id=user.user_id,
+                type_slug="new-client",
+                title="Welcome to FitNet",
+                body=f"New profile has been set up {user.user_id}"
+            )
             return {"msg": "Setup successful", "auth_id": user.user_id}, 201 
     
         except Exception as e:
@@ -136,24 +145,9 @@ class UserMe(MethodView):
             "roles": roles,
             "msg": "Token is valid and middleware is active"
         }, 200
-    
-    @jwt_required()
-    def delete(self):
-        """
-        Deletes the current user's account based on JWT identity
-        """
-        current_auth_id=get_jwt_identity()
+           
 
-        user_auth=UserAuths.query.get_or_404(current_auth_id)
-
-        try:
-            db.session.delete(user_auth)
-            db.session.commit()
-            return {"msg": "Account successfully deleted"}, 200
-        except:
-            db.session.rollback()
-            abort(500, description="Could not delete account")
-
+   
 
 @auth_blp.route("/promote/<int:auth_id>")
 class AdminPromote(MethodView):
@@ -174,17 +168,7 @@ class AdminPromote(MethodView):
         
         try:
             db.session.add(new_assignment)
-            
-            notif_type = NotificationTypes.query.filter_by(slug='admin-approval').first()
-            if notif_type:
-                new_notif = Notifications(
-                    user_id=auth_id,
-                    notification_type_id=notif_type.notification_type_id,
-                    title="Promotion Approved!",
-                    body="An admin has promoted you to the Coach role.",
-                    is_read=False
-                )
-                db.session.add(new_notif)
+
                 
             db.session.commit()
             return {"msg": f"User with auth_id {auth_id} is now a coach"}, 200

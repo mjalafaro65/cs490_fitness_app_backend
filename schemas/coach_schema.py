@@ -30,10 +30,11 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
         model = CoachProfiles
         load_instance = True
         include_fk = True
-        sqla_session = db.session
+        # exclude = ("specialty_id",)
         name = "CoachProfileData"
 
     user_id = fields.Int(dump_only=True)
+    
     coach_profile_id = fields.Int(dump_only=True)
     is_flagged = fields.Bool(dump_only=True)
     approved_by_admin_user_id = fields.Int(dump_only=True)
@@ -42,12 +43,17 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
     flagged_at = fields.DateTime(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+    
+    specialty_id = fields.Int(required=True, load_only=True)
+    
+    specialty_name = fields.String(attribute="specialty.name", dump_only=True)
+    
 
 class CoachProfileQuerySchema(Schema):
     user_id = fields.Int()
 
 class CoachDocumentSchema(Schema):
-    document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'ID', 'Insurance']))
+    document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'ID', 'Other']))
     document_url = fields.Str(required=True)
     
     # These are for the Database/Response only
@@ -61,16 +67,56 @@ class CoachDocumentSchema(Schema):
         include_fk = True
         
 
+class SpecialtySchema(Schema):
+    specialty_id = fields.Int(dump_only=True)
+    name = fields.Str(required=True)
+
 class CoachBrowsingSchema(Schema):
     coach_profile_id = fields.Int(dump_only=True)
     first_name = fields.Str(dump_only=True)
     last_name = fields.Str(dump_only=True)
+    user_id=fields.Int(dump_only=True)
     specialty_name = fields.Str(dump_only=True)
     years_experience = fields.Int(dump_only=True)
+    is_favorited = fields.Bool(dump_only=True)
     bio = fields.Str(dump_only=True)
+
+
+
+class PaymentPlanSchema(Schema):
+    payment_plan_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(required=True)
+    name = fields.Str(required=True)
+    billing_type = fields.Str(validate=validate.OneOf(['recurring', 'onetime']), required=True)
+    billing_type = fields.Function(lambda obj: obj.billing_type.value)
+    amount = fields.Decimal(as_string=True, required=True)
+    is_active = fields.Bool(dump_only=True)
+    is_custom = fields.Bool(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+
+
 
 
 #class CoachFiltering(Schema):
 #    pass
 
-   
+class AssignWorkoutPlanSchema(Schema):
+    plan_id = fields.Int(required=True)
+    assigned_to_client_id = fields.Int(required=True)
+    assigned_by_coach_id = fields.Int(dump_only=True)  
+    assignment_date = fields.Date(dump_only=True)
+    start_date = fields.Date()
+    end_date = fields.Date()
+    repeat_rules = fields.Str(validate=validate.OneOf(['none', 'daily', 'weekly', 'monthly']), required=True)
+    status = fields.Str(validate=validate.OneOf(['active', 'completed', 'cancelled']), required=True)
+    created_at = fields.DateTime(dump_only=True)
+
+class AssignMealPlanSchema(Schema):
+    meal_plan_id = fields.Int(required=True)
+    user_id = fields.Int(required=True)
+    assigned_by_user_id = fields.Int(dump_only=True)  
+    start_date = fields.Date()
+    end_date = fields.Date()
+    repeat_rule = fields.Str(validate=validate.OneOf(['none', 'daily', 'weekly', 'biweekly', 'monthly']), required=True)
+    status = fields.Str(validate=validate.OneOf(['active', 'completed', 'canceled']), required=True)
+    created_at = fields.DateTime(dump_only=True)

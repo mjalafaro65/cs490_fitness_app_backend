@@ -3,7 +3,7 @@ import enum
 from db import db
 
 class BillTypeEnum(enum.Enum):
-    one_time = 'one_time'
+    onetime = 'onetime'
     recurring = 'recurring'
 
 class PaymentPlans(db.Model):

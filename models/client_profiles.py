@@ -3,15 +3,16 @@ import enum
 from db import db
 
 class gender_enum(enum.Enum):
-    MALE = "male"
-    FEMALE = "female"
-    OTHER = "other"
-    Prefer_not_to_say = "prefer_not_to_say"
+    male = "male"
+    female = "female"
+    other = "other"
+    prefer_not_to_say = "prefer_not_to_say"
 
 class ClientProfiles(db.Model):
     __tablename__ = "client_profiles"
     client_profile_id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer,db.ForeignKey('users.user_id'), nullable=False)
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     date_of_birth = db.Column(db.Date, nullable=True)
     gender = db.Column(db.Enum(gender_enum), nullable=True)
     profile_photo = db.Column(db.String(255), nullable=True)

@@ -41,12 +41,15 @@ from .refund_disputes import RefundDisputes
 # Communication & Tracking
 from .conversations import Conversations
 from .messages import Messages
+from .conversation_participants import ConversationParticipants
+from .online_users import OnlineUsers
 from .notifications import Notifications
 from .notification_types import NotificationTypes
 from .coach_reviews import CoachReviews
 from .review_images import ReviewImages
 from .review_flags import ReviewFlags
 from .review_interactions import ReviewInteractions
+from .coach_favorites import CoachFavorites
 from .goals import Goals
 from .daily_survey import DailySurvey
 from .coach_progress_photos import CoachProgressPhotos

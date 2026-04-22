@@ -6,8 +6,10 @@ class Notifications(db.Model):
     __tablename__ = 'notifications'
     
     notification_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    notification_type_id = db.Column(db.Integer, db.ForeignKey('notification_types.notif_id'), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
+    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
+    notification_type_id = db.Column(db.Integer, db.ForeignKey('notification_types.notification_type_id'), nullable=False)
     title = db.Column(db.String(120), nullable=False)
     body = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
