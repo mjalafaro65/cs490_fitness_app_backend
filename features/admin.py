@@ -2,20 +2,16 @@ from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, CoachReviews, AccountDeletionInfo, ClientProfiles
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments
 from db import db
 from datetime import date, datetime, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
-from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema
+from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema, DisableAccountSchema
 from schemas.user_schema import UserInfoSchema, UserQuerySchema
 from models.coach_profiles import ApprovalStatusEnum
-from sqlalchemy import func
-from datetime import datetime, timedelta, timezone
 from models.coach_documents import StatusEnum
-
-
 
 admin_blp=Blueprint("Admin", __name__, url_prefix="/admin", description="Admin features")
 
@@ -204,3 +200,32 @@ class AdminUserStatsView(MethodView):
             "deletions_last_7_days": del_count,
             "client_users": client_users,         
         }
+
+
+@admin_blp.route("/users/disable")
+class DisableAccountView(MethodView):
+    @roles_required("admin")
+    @admin_blp.arguments(DisableAccountSchema)
+    @admin_blp.response(200, description="User account disabled/enabled successfully.")
+    def patch(self, data):
+        user_id = data['user_id']
+        is_active = data['is_active']
+
+        user = Users.query.filter_by(user_id=user_id).first()
+        if not user:
+            return {"msg": "User not found"}, 404
+
+        user.is_active = bool(is_active)
+
+        if not user.is_active:
+            admin_auth_id = get_jwt_identity()
+            admin_user_id = db.session.query(Users.user_id).filter_by(auth_id=admin_auth_id).scalar()
+            admin_user_id = 1
+            user.disabled_by_admin_user_id = admin_user_id
+            user.disabled_at = datetime.now(timezone.utc)
+        else:
+            user.disabled_by_admin_user_id = None
+            user.disabled_at = None
+
+        db.session.commit()
+        return {"message": f"User account {'disabled' if not user.is_active else 'enabled'} successfully."}
