@@ -120,3 +120,7 @@ class AssignMealPlanSchema(Schema):
     repeat_rule = fields.Str(validate=validate.OneOf(['none', 'daily', 'weekly', 'biweekly', 'monthly']), required=True)
     status = fields.Str(validate=validate.OneOf(['active', 'completed', 'canceled']), required=True)
     created_at = fields.DateTime(dump_only=True)
+
+class ManageClientSchema(Schema):
+    relationship_id = fields.Int(required=True)
+    status = fields.String(required=True, validate=validate.OneOf(["active", "inactive", "terminated"]))

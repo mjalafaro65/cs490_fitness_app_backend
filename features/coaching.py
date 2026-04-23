@@ -2,15 +2,17 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema
 from schemas.client_schema import ReviewCoachSchema
 
-from schemas.client_schema import DailySurveySchema
+from models.coach_hire_requests import StatusEnum
+from schemas.client_schema import DailySurveySchema, HireRequestStatusSchema
 from models.coach_profiles import ApprovalStatusEnum
+from models.coach_client_relationships import status_enum
 from .utils import create_notification
 
 
@@ -679,7 +681,271 @@ class CoachReviewsPublic(MethodView):
         return CoachReviews.query.filter_by(
             coach_profile_id=coach_id
         ).all()
+    
+
+@coach_blp.route("/pending-requests")
+class CoachPendingRequestsView(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        if not coach_profile:
+            abort(404, description="Coach profile not found")
+
+        results = db.session.execute(
+            select(
+                CoachHireRequests, 
+                PaymentPlans.name, 
+                PaymentPlans.billing_type
+            )
+            .join(PaymentPlans, CoachHireRequests.payment_plan_id == PaymentPlans.payment_plan_id)
+            .where(
+                CoachHireRequests.coach_profile_id == coach_profile.coach_profile_id,
+                CoachHireRequests.status == StatusEnum.pending
+            )
+        ).all()
+
+        return [{
+            "request_id": row.CoachHireRequests.request_id,
+            "client_user_id": row.CoachHireRequests.client_user_id,
+            "status": row.CoachHireRequests.status.value,
+            "created_at": row.CoachHireRequests.created_at.isoformat(),
+            "plan_name": row.name,          
+            "billing_type": row.billing_type.value 
+        } for row in results]
             
+
+
+@coach_blp.route("/hire-request/<int:request_id>")
+class CoachHireRequestDetailView(MethodView):
+    @jwt_required()
+    def get(self, request_id):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        result = db.session.execute(
+            select(
+                CoachHireRequests, 
+                Users.first_name, 
+                Users.last_name, 
+                Users.phone_number, 
+                Users.is_active,
+                PaymentPlans.name,
+                PaymentPlans.billing_type
+            )
+            .join(Users, CoachHireRequests.client_user_id == Users.user_id)
+            .join(PaymentPlans, CoachHireRequests.payment_plan_id == PaymentPlans.payment_plan_id)
+            .where(
+                CoachHireRequests.request_id == request_id,
+                CoachHireRequests.coach_profile_id == coach_profile.coach_profile_id
+            )
+        ).first()
+
+        if not result:
+            abort(403, description="Request not found or access denied")
+
+        return {
+            "request_id": result.CoachHireRequests.request_id,
+            "client_name": f"{result.first_name} {result.last_name}",
+            "phone_number": result.phone_number,
+            "client_is_active": result.is_active,
+            "plan_name": result.name,
+            "billing_type": result.billing_type.value,
+            "status": result.CoachHireRequests.status.value,
+            "created_at": result.CoachHireRequests.created_at.isoformat()
+        }
+    
+
+
+@coach_blp.route("/hire-request/<int:request_id>/accept")
+class CoachAcceptHireRequest(MethodView):
+    @jwt_required()
+    def post(self, request_id):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        hire_request = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.request_id == request_id,
+                CoachHireRequests.coach_profile_id == coach_profile.coach_profile_id
+            )
+        ).scalar_one_or_none()
+
+        if not hire_request:
+            abort(404, description="Hire request not found")
+
+        if hire_request.status != StatusEnum.pending:
+            abort(400, description="Request is no longer pending")
+
+
+        hire_request.status = StatusEnum.accepted
+        hire_request.decided_at = db.func.now()
+
+        new_relationship = CoachClientRelationships(
+            coach_profile_id=hire_request.coach_profile_id,
+            client_user_id=hire_request.client_user_id,
+            payment_plan_id=hire_request.payment_plan_id,
+            status="active", 
+            started_at=db.func.now()
+        )
+        
+        db.session.add(new_relationship)
+        
+        db.session.commit()
+
+        create_notification(
+                user_id=hire_request.client_user_id,
+                type_slug="coach-request-accepted",
+                title="Accepted Coach Request",
+                body=f"Your coach hire request has been canceled"
+            )
+
+        return {
+            "message": "Client accepted and relationship activated",
+            "relationship_id": new_relationship.relationship_id
+        }
+    
+
+@coach_blp.route("/hire-request/<int:request_id>/deny")
+class CoachDenyHireRequest(MethodView):
+    @jwt_required()
+    def post(self, request_id):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        hire_request = db.session.execute(
+            select(CoachHireRequests).where(
+                CoachHireRequests.request_id == request_id,
+                CoachHireRequests.coach_profile_id == coach_profile.coach_profile_id
+            )
+        ).scalar_one_or_none()
+
+        if not hire_request or hire_request.status != StatusEnum.pending:
+            abort(400, description="Request cannot be denied (already processed or not found)")
+
+        hire_request.status = StatusEnum.denied
+        hire_request.decided_at = db.func.now()
+        
+        db.session.commit()
+
+        create_notification(
+            user_id=hire_request.client_user_id,
+            type_slug="coach-request-denied",
+            title="Request Denied",
+            body=f"Coach {coach_user.first_name} is unable to take on new clients at this time. Your request has been declined."
+        )
+
+        return {
+            "message": "Coach denied request",
+            "request_id": hire_request.request_id
+        }
+    
+
+
+
+@coach_blp.route("/show-client-relationships")
+class CoachActiveRosterView(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        results = db.session.execute(
+            select(
+                CoachClientRelationships.relationship_id,
+                CoachClientRelationships.status,
+                Users.first_name, 
+                Users.last_name, 
+                PaymentPlans.name, 
+                PaymentPlans.billing_type
+            )
+            .join(Users, CoachClientRelationships.client_user_id == Users.user_id)
+            .join(PaymentPlans, CoachClientRelationships.payment_plan_id == PaymentPlans.payment_plan_id)
+            .where(
+                CoachClientRelationships.coach_profile_id == coach_profile.coach_profile_id,
+            )
+        ).all()
+
+        active_roster = []
+        for row in results:
+            active_roster.append({
+                "relationship_id": row.relationship_id,
+                "client_name": f"{row.first_name} {row.last_name}",
+                "plan_name": row.name,
+                "billing_type": row.billing_type.value,
+                "status": row.status.value
+            })
+
+        return active_roster
+    
+
+
+@coach_blp.route("/manage-client")
+class CoachManageClientStatus(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(ManageClientSchema) 
+    def post(self, data):
+        rel_id = data.get("relationship_id")
+        new_status_str = data.get("status", "").lower()
+
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        relationship = db.session.execute(
+            select(CoachClientRelationships).where(
+                CoachClientRelationships.relationship_id == rel_id,
+                CoachClientRelationships.coach_profile_id == coach_profile.coach_profile_id
+            )
+        ).scalar_one_or_none()
+
+        if not relationship:
+            abort(404, description="Relationship not found or access denied")
+
+        relationship.status = status_enum[new_status_str]
+
+        if relationship.status == status_enum.terminated:
+            relationship.ended_at = db.func.now()
+        else:
+            relationship.ended_at = None
+
+        db.session.commit()
+
+        create_notification(
+            user_id=relationship.client_user_id,
+            type_slug="relationship-update",
+            title="Relationship Status Changed",
+            body=f"Coach {coach_user.first_name} has updated your status to: {new_status_str}."
+        )
+
+        return {
+            "message": f"Coach changed client relationship to {relationship.status.value}",
+            "coach_client_relationship": relationship.relationship_id
+        }
 @coach_blp.route("/favorite")
 class FavoriteCoach(MethodView):
     @jwt_required()
