@@ -6,7 +6,7 @@ from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, C
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, ManageClientSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema
 from schemas.client_schema import ReviewCoachSchema
 
 from models.coach_hire_requests import StatusEnum
@@ -946,3 +946,39 @@ class CoachManageClientStatus(MethodView):
             "message": f"Coach changed client relationship to {relationship.status.value}",
             "coach_client_relationship": relationship.relationship_id
         }
+@coach_blp.route("/favorite")
+class FavoriteCoach(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(FavoriteCoachSchema)
+    @coach_blp.response(200, FavoriteCoachSchema)
+    def post(self, data):
+        auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=auth_id).first_or_404()
+
+        existing_favorite = CoachFavorites.query.filter_by(
+            user_id=user.user_id,
+            coach_profile_id=data['coach_profile_id']
+        ).first()
+
+        if existing_favorite:
+            try:
+                db.session.delete(existing_favorite)
+                db.session.commit()
+                return {"message": "Removed from favorites"}, 200 
+            except Exception:
+                db.session.rollback()
+                abort(500, description="Failed to remove favorite.")
+
+        favorite = CoachFavorites(
+            user_id=user.user_id,
+            coach_profile_id=data['coach_profile_id'],
+            created_at=datetime.utcnow()
+        )
+
+        try:
+            db.session.add(favorite)
+            db.session.commit()
+            return favorite
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Failed to favorite coach.")
