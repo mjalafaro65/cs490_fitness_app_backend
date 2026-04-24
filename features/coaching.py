@@ -2,11 +2,11 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery
 from schemas.client_schema import ReviewCoachSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
@@ -499,7 +499,8 @@ class CoachBrowse(MethodView):
             Users.user_id,
             Specialties.name.label("specialty_name"),
             CoachProfiles.years_experience,
-            CoachProfiles.bio
+            CoachProfiles.bio,
+             CoachProfiles.profile_photo
         ).join(Users, CoachProfiles.user_id == Users.user_id) \
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
         .filter(CoachProfiles.status == ApprovalStatusEnum.approved) \
@@ -508,13 +509,44 @@ class CoachBrowse(MethodView):
         return results
 
 
-### Filter for type of coach
-@coach_blp.route("/coachbrowse/filter")
+# # Filter for type of coach
+# @coach_blp.route("/coachbrowse/filter")
+# class CoachBrowseFilter(MethodView):
+#     @coach_blp.arguments(CoachBrowsingQuery, location="query")
+#     @coach_blp.response(200, CoachBrowsingSchema(many=True))
+#     def get(self, args):
+#         specialty_id = args.get("specialty_id")
+
+#         query = db.session.query(
+#             CoachProfiles.coach_profile_id,
+#             Users.first_name,
+#             Users.last_name,
+#             Specialties.name.label("specialty_name"),
+#             CoachProfiles.years_experience,
+#             CoachProfiles.bio
+#         ).join(Users, CoachProfiles.user_id == Users.user_id) \
+#         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
+#         .filter(CoachProfiles.status == ApprovalStatusEnum.approved) 
+        
+
+#         if specialty_id:
+#             query = query.filter(CoachProfiles.specialty_id == specialty_id)
+
+#         results = query.all()
+#         return results
+
+
+@coach_blp.route("/coachbrowse/filters")
 class CoachBrowseFilter(MethodView):
-    @coach_blp.arguments(CoachBrowsingSchema, location="query")
+
+    @coach_blp.arguments(CoachBrowsingQuery, location="query")
     @coach_blp.response(200, CoachBrowsingSchema(many=True))
-    def get(self, args):
-        specialty_id = request.args.get("specialty_id")
+    def get(self, query_args):
+
+        specialty_id = query_args.get("specialty_id")
+        min_price = query_args.get("min_price")
+        max_price = query_args.get("max_price")
+        day_of_week = query_args.get("day_of_week")
 
         query = db.session.query(
             CoachProfiles.coach_profile_id,
@@ -522,17 +554,32 @@ class CoachBrowseFilter(MethodView):
             Users.last_name,
             Specialties.name.label("specialty_name"),
             CoachProfiles.years_experience,
-            CoachProfiles.bio
-        ).join(Users, CoachProfiles.user_id == Users.user_id) \
-        .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
-        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) 
-        
+            CoachProfiles.bio,
+            CoachProfiles.profile_photo
+        )\
+        .join(Users, CoachProfiles.user_id == Users.user_id)\
+        .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)\
+        .filter(CoachProfiles.status == ApprovalStatusEnum.approved)
+
+        if min_price is not None:
+            query = query.join(PaymentPlans)\
+                .filter(PaymentPlans.amount >= min_price)
+
+        if max_price is not None:
+            query = query.join(PaymentPlans)\
+                .filter(PaymentPlans.amount <= max_price)
+
+        if day_of_week is not None:
+            query = query.join(CoachAvailability)\
+                .filter(CoachAvailability.day_of_week == day_of_week)
 
         if specialty_id:
             query = query.filter(CoachProfiles.specialty_id == specialty_id)
 
-        results = query.all()
-        return results
+        return query.distinct().all()
+        
+
+        
 
 ### Coach Recommendation
 ### Recommends based on goal type
