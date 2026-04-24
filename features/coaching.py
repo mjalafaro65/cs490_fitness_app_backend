@@ -173,9 +173,10 @@ class InitSpecialties(MethodView):
 
         return specialties
 
+
 @coach_blp.route("/coach-profile")
 class CoachProfileView(MethodView):
-    @jwt_required()
+    @jwt_required(optional=True)
     @coach_blp.arguments(CoachProfileQuerySchema, location="query")
     @coach_blp.response(200, CoachProfileSchema)
     def get(self,args):
@@ -210,6 +211,7 @@ class CoachProfileView(MethodView):
             return {"message":"Coach profile not found."}, 404
         
         return profile
+    
     
     @jwt_required()
     @coach_blp.arguments(CoachProfileSchema(load_instance=False, exclude=("status",)))
@@ -875,8 +877,10 @@ class CoachActiveRosterView(MethodView):
             select(
                 CoachClientRelationships.relationship_id,
                 CoachClientRelationships.status,
+                Users.user_id, 
                 Users.first_name, 
                 Users.last_name, 
+                PaymentPlans.payment_plan_id,
                 PaymentPlans.name, 
                 PaymentPlans.billing_type
             )
@@ -890,11 +894,20 @@ class CoachActiveRosterView(MethodView):
         active_roster = []
         for row in results:
             active_roster.append({
-                "relationship_id": row.relationship_id,
-                "client_name": f"{row.first_name} {row.last_name}",
-                "plan_name": row.name,
-                "billing_type": row.billing_type.value,
-                "status": row.status.value
+               
+                    "relationship_id": row.relationship_id,
+                    "user": {
+                        "user_id": row.user_id,
+                        "first_name": row.first_name,
+                        "last_name": row.last_name,
+                    },
+                    "plan": {
+                        "plan_id": row.payment_plan_id,
+                        "name": row.name,
+                        "billing_type": row.billing_type.value
+                    },
+                    "status": row.status.value
+                
             })
 
         return active_roster
