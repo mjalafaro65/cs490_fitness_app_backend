@@ -1095,41 +1095,39 @@ class UpdateInvoiceStatus(MethodView):
             "message": f"Status updated to {invoice.status.value}",
             "invoice_id": invoice.invoice_id
         }
+      
+@coach_blp.route("/favorite")
+class FavoriteCoach(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(FavoriteCoachSchema)
+    @coach_blp.response(200, FavoriteCoachSchema)
+    def post(self, data):
+        auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=auth_id).first_or_404()
+        existing_favorite = CoachFavorites.query.filter_by(
+            user_id=user.user_id,
+            coach_profile_id=data['coach_profile_id']
+        ).first()
 
+        if existing_favorite:
+            try:
+                db.session.delete(existing_favorite)
+                db.session.commit()
+                return {"message": "Removed from favorites"}, 200 
+            except Exception:
+                db.session.rollback()
+                abort(500, description="Failed to remove favorite.")
 
-# @coach_blp.route("/favorite")
-# class FavoriteCoach(MethodView):
-#     @jwt_required()
-#     @coach_blp.arguments(FavoriteCoachSchema)
-#     @coach_blp.response(200, FavoriteCoachSchema)
-#     def post(self, data):
-#         auth_id = get_jwt_identity()
-#         user = Users.query.filter_by(auth_id=auth_id).first_or_404()
+        favorite = CoachFavorites(
+            user_id=user.user_id,
+            coach_profile_id=data['coach_profile_id'],
+            created_at=datetime.utcnow()
+        )
 
-#         existing_favorite = CoachFavorites.query.filter_by(
-#             user_id=user.user_id,
-#             coach_profile_id=data['coach_profile_id']
-#         ).first()
-
-#         if existing_favorite:
-#             try:
-#                 db.session.delete(existing_favorite)
-#                 db.session.commit()
-#                 return {"message": "Removed from favorites"}, 200 
-#             except Exception:
-#                 db.session.rollback()
-#                 abort(500, description="Failed to remove favorite.")
-
-#         favorite = CoachFavorites(
-#             user_id=user.user_id,
-#             coach_profile_id=data['coach_profile_id'],
-#             created_at=datetime.utcnow()
-#         )
-
-#         try:
-#             db.session.add(favorite)
-#             db.session.commit()
-#             return favorite
-#         except Exception as e:
-#             db.session.rollback()
-#             abort(500, description="Failed to favorite coach.")
+        try:
+            db.session.add(favorite)
+            db.session.commit()
+            return favorite
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Failed to favorite coach.")
