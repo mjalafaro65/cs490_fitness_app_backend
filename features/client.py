@@ -259,7 +259,6 @@ class EditDailyView(MethodView):
 
 @client_blp.route("/coach-payment-plans/<int:coach_profile_id>")
 class ClientPaymentPlanListView(MethodView):
-    @jwt_required()
     @client_blp.response(200, PaymentPlanSchema(many=True))
     def get(self,coach_profile_id):
         profile = CoachProfiles.query.get_or_404(coach_profile_id)
