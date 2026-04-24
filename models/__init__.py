@@ -10,6 +10,7 @@ from .client_profiles import ClientProfiles
 from .coach_profiles import CoachProfiles
 from .coach_client_relationships import CoachClientRelationships
 from .coach_hire_requests import CoachHireRequests
+from .coach_availavilty import CoachAvailability
 
 # Workouts
 from .exercises import Exercises

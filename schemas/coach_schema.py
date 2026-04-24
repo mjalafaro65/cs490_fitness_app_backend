@@ -79,7 +79,15 @@ class CoachBrowsingSchema(Schema):
     specialty_name = fields.Str(dump_only=True)
     years_experience = fields.Int(dump_only=True)
     is_favorited = fields.Bool(dump_only=True)
+    profile_photo = fields.Str(validate=validate.Length(max=500), allow_none=True)
     bio = fields.Str(dump_only=True)
+
+
+class CoachBrowsingQuery(Schema):
+    specialty_id = fields.Int(required=False)
+    min_price = fields.Float(required=False)
+    max_price = fields.Float(required=False)
+    day_of_week = fields.Int(required=False)
 
 
 
