@@ -124,3 +124,9 @@ class AssignMealPlanSchema(Schema):
 class ManageClientSchema(Schema):
     relationship_id = fields.Int(required=True)
     status = fields.String(required=True, validate=validate.OneOf(["active", "inactive", "terminated"]))
+
+class FavoriteCoachSchema(Schema):
+    favorite_id = fields.Int(dump_only=True)
+    user_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(required=True)
+    created_at = fields.DateTime(dump_only=True)
