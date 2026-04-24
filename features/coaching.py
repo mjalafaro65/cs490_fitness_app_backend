@@ -186,18 +186,22 @@ class CoachProfileView(MethodView):
         Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
-        result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
-        curr_user_id = result[0] if result else None
-        
-        if not curr_user_id:
-            abort(401, description="User not found.")
+
+
+        if curr_auth_id:
+            result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
+            curr_user_id = result[0] if result else None
+        else:
+            curr_user_id=None            
 
        
         target_user_id = args.get("user_id")
 
+        if not target_user_id and not curr_auth_id:
+            return {"message": "user_id not obtained"}, 404
+
         #if target id is provided check if its the logged in user
         #######need to check if its admin or client doing the call
-        print(target_user_id, curr_user_id)
         if target_user_id and target_user_id != curr_user_id:
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()

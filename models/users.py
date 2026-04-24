@@ -62,9 +62,9 @@ class Users(db.Model):
     #     foreign_keys="MealPlanAssignments.user_id",
     #     cascade="all, delete-orphan"
     # )
-    meal_plans = db.relationship(
-        "MealPlans",
-    )
+    # meal_plans = db.relationship(
+    #     "MealPlans",
+    # )
     # messages = db.relationship(
     #     "Messages",
     #     cascade="all, delete-orphan"
