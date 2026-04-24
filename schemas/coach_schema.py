@@ -138,3 +138,12 @@ class FavoriteCoachSchema(Schema):
     user_id = fields.Int(dump_only=True)
     coach_profile_id = fields.Int(required=True)
     created_at = fields.DateTime(dump_only=True)
+
+
+class CoachAvailabilitySchema(Schema):
+    availability_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+
+    day_of_week = fields.Int(required=True)
+    start_time = fields.Time(required=True)  
+    end_time = fields.Time(required=True)

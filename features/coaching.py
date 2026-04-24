@@ -1,12 +1,13 @@
 from datetime import datetime
+from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery
+from sqlalchemy import func, not_, select, desc
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
 from schemas.client_schema import ReviewCoachSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
@@ -580,6 +581,152 @@ class CoachBrowseFilter(MethodView):
         
 
         
+@coach_blp.route("/coach/availability")
+class CoachAvailabilityView(MethodView):
+
+    @jwt_required()
+    @coach_blp.arguments(CoachAvailabilitySchema)
+    @coach_blp.response(201, CoachAvailabilitySchema)
+    def post(self, data):
+        curr_auth_id = 20
+
+        user = Users.query.filter_by(auth_id=curr_auth_id).first()
+        if not user:
+            abort(401, description="User not found")
+
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+        if not coach:
+            abort(404, description="Coach profile not found")
+
+        day_of_week = data["day_of_week"]
+        start_time = data["start_time"]
+        end_time = data["end_time"]
+
+        if start_time >= end_time:
+            abort(400, description="Start time must be before end time")
+
+        if day_of_week < 0 or day_of_week > 6:
+            abort(400, description="day_of_week must be 0–6")
+        
+        
+        overlap = CoachAvailability.query.filter(
+            CoachAvailability.coach_profile_id == coach.coach_profile_id,
+            CoachAvailability.day_of_week == day_of_week,
+            not_(
+                or_(
+                    end_time <= CoachAvailability.start_time,
+                    start_time >= CoachAvailability.end_time
+                )
+            )
+        ).first()
+        if overlap:
+            abort(400, description="Time slot overlaps with existing availability")
+
+        availability = CoachAvailability(
+            coach_profile_id=coach.coach_profile_id,
+            day_of_week=day_of_week,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        db.session.add(availability)
+        db.session.commit()
+
+        return availability
+    
+
+    @jwt_required()
+    @coach_blp.response(200, CoachAvailabilitySchema(many=True))
+    def get(self):
+        curr_auth_id =get_jwt_identity()
+
+        user = Users.query.filter_by(auth_id=curr_auth_id).first()
+        if not user:
+            abort(401, description="User not found")
+
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+        if not coach:
+            abort(404, description="Coach profile not found")
+
+        availability = CoachAvailability.query.filter_by(
+            coach_profile_id=coach.coach_profile_id
+        ).all()
+
+        return availability
+
+@coach_blp.route("/coach/availability/<int:availability_id>")
+class CoachAvailabilityEditView(MethodView):
+
+    @jwt_required()
+    @coach_blp.arguments(CoachAvailabilitySchema)
+    @coach_blp.response(200, CoachAvailabilitySchema)
+    def put(self, data, availability_id):
+
+        user = Users.query.filter_by(auth_id=get_jwt_identity()).first()
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+
+        availability = CoachAvailability.query.filter_by(
+            availability_id=availability_id,
+            coach_profile_id=coach.coach_profile_id
+        ).first()
+
+        if not availability:
+            abort(404, description="Not found")
+
+        start_time = data["start_time"]
+        end_time = data["end_time"]
+
+        if end_time <= start_time:
+            abort(400, description="End time must be after start time")
+
+        # update only if valid
+        availability.day_of_week = data["day_of_week"]
+        availability.start_time = start_time
+        availability.end_time = end_time
+
+        db.session.commit()
+
+        return availability
+        
+    @jwt_required()
+    def delete(self, availability_id):
+
+        user = Users.query.filter_by(auth_id=get_jwt_identity()).first()
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+
+        availability = CoachAvailability.query.filter_by(
+            availability_id=availability_id,
+            coach_profile_id=coach.coach_profile_id
+        ).first()
+
+        if not availability:
+            abort(404, description="Not found")
+
+        db.session.delete(availability)
+        db.session.commit()
+
+        return {"message": "Deleted successfully"}
+
+
+    
+@coach_blp.route("/coach/<int:coach_profile_id>/availability")
+class CoachAvailabilityPublicView(MethodView):
+
+    @coach_blp.response(200, CoachAvailabilitySchema(many=True))
+    def get(self, coach_profile_id):
+
+        availability = CoachAvailability.query.filter_by(
+            coach_profile_id=coach_profile_id
+        ).all()
+
+        if not availability:
+            return []
+
+        return availability
+
+        
+
+
 
 ### Coach Recommendation
 ### Recommends based on goal type
