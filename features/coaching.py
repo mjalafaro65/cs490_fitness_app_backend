@@ -2,18 +2,21 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema
 from schemas.client_schema import ReviewCoachSchema
+from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
 from models.coach_hire_requests import StatusEnum
+from models.invoices import StatusEnumList
 from schemas.client_schema import DailySurveySchema, HireRequestStatusSchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_client_relationships import status_enum
 from .utils import create_notification
+from datetime import datetime, timezone
 
 
 
@@ -946,6 +949,141 @@ class CoachManageClientStatus(MethodView):
             "message": f"Coach changed client relationship to {relationship.status.value}",
             "coach_client_relationship": relationship.relationship_id
         }
+    
+
+@coach_blp.route("/generate-invoice")
+class CoachGenerateInvoice(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(CreateInvoiceSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        rel_id = data.get("relationship_id")
+
+        result = db.session.execute(
+            select(CoachClientRelationships, PaymentPlans)
+            .join(PaymentPlans, CoachClientRelationships.payment_plan_id == PaymentPlans.payment_plan_id)
+            .where(
+                CoachClientRelationships.relationship_id == rel_id,
+                CoachClientRelationships.status == status_enum.active,
+                CoachClientRelationships.coach_profile_id.in_(
+                    select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
+                )
+            )
+        ).first()
+
+        if not result:
+            abort(404, description="Active relationship not found or unauthorized")
+
+        rel, plan = result
+
+        payment_method = db.session.execute(
+            select(PaymentMethods).where(PaymentMethods.user_id == rel.client_user_id)
+        ).scalar_one_or_none()
+
+        current_status = StatusEnumList.issued
+        now_utc = datetime.now(timezone.utc)
+
+        new_invoice = Invoices(
+            relationship_id=rel.relationship_id,
+            payment_method_id=payment_method.payment_method_id if payment_method else None,
+            status=current_status,
+            currency="USD",
+            subtotal=plan.amount, 
+            created_at=now_utc,
+            issued_at=now_utc if current_status == StatusEnumList.issued else None
+        )
+
+        db.session.add(new_invoice)
+        db.session.flush() 
+
+        create_notification(
+            user_id=rel.client_user_id,
+            type_slug="invoice-update",
+            title="Invoice Generated",
+            body=f"New invoice for ${plan.amount} issued by Coach {coach_user.first_name}."
+        )
+
+        db.session.commit()
+
+        return {
+            "message": "Invoice generated and client notified",
+            "invoice_id": new_invoice.invoice_id,
+            "status": new_invoice.status.value,
+            "amount": float(plan.amount)
+        }, 201
+    
+
+from sqlalchemy.orm import aliased
+
+@coach_blp.route("/invoices")
+class CoachInvoiceList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        client_user = aliased(Users)
+        
+        query = (
+            select(Invoices, client_user.first_name, client_user.last_name)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .join(client_user, CoachClientRelationships.client_user_id == client_user.user_id)
+            .where(
+                CoachClientRelationships.coach_profile_id.in_(
+                    select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
+                )
+            )
+            .order_by(Invoices.created_at.desc())
+        )
+
+        results = db.session.execute(query).all()
+
+        return {
+            "invoices": [
+                {
+                    "invoice_id": inv.invoice_id,
+                    "relationship_id": inv.relationship_id,
+                    "client_name": f"{fname} {lname}", 
+                    "amount": float(inv.subtotal),
+                    "status": inv.status.value, 
+                    "created_at": inv.created_at.isoformat()
+                } for inv, fname, lname in results
+            ]
+        }
+
+
+@coach_blp.route("/update-status")
+class UpdateInvoiceStatus(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(UpdateInvoiceStatusSchema)
+    def patch(self, data):
+        invoice = Invoices.query.get_or_404(data["invoice_id"])
+        
+        if invoice.status == StatusEnumList.paid:
+            return {"message": "Invoice already paid. Suggest refund workflow."}, 400
+
+        relationship = CoachClientRelationships.query.get(invoice.relationship_id)
+
+        old_status = invoice.status.value
+        invoice.status = data["new_status"]
+        db.session.commit()
+        
+        if relationship:
+            create_notification(
+                user_id=relationship.client_user_id,
+                type_slug="invoice-update",
+                title="Invoice Status Changed",
+                body=f"Your invoice #{invoice.invoice_id} has been updated from {old_status} to {invoice.status.value}."
+            )
+
+        return {
+            "message": f"Status updated to {invoice.status.value}",
+            "invoice_id": invoice.invoice_id
+        }
+
+
 # @coach_blp.route("/favorite")
 # class FavoriteCoach(MethodView):
 #     @jwt_required()
