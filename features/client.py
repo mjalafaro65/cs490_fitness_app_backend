@@ -8,6 +8,7 @@ from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
 from models.invoices import Invoices
 
+
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
