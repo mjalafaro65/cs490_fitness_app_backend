@@ -4,6 +4,7 @@ from models.invoices import StatusEnumList
 
 class CreateInvoiceSchema(Schema):
     relationship_id = fields.Int(required=True)
+    amount = fields.Decimal(required=True, places=2, validate=validate.Range(min=0.01))
 
 class UpdateInvoiceStatusSchema(Schema):
     invoice_id = fields.Int(required=True)

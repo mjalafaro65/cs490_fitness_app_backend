@@ -960,39 +960,39 @@ class CoachGenerateInvoice(MethodView):
         coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
         
         rel_id = data.get("relationship_id")
+        input_amount = data.get("amount")
 
         result = db.session.execute(
-            select(CoachClientRelationships, PaymentPlans)
-            .join(PaymentPlans, CoachClientRelationships.payment_plan_id == PaymentPlans.payment_plan_id)
+            select(CoachClientRelationships)
             .where(
                 CoachClientRelationships.relationship_id == rel_id,
-                CoachClientRelationships.status == status_enum.active,
+                CoachClientRelationships.status == status_enum.active, #
                 CoachClientRelationships.coach_profile_id.in_(
                     select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
                 )
             )
-        ).first()
+        ).scalar_one_or_none()
 
         if not result:
             abort(404, description="Active relationship not found or unauthorized")
 
-        rel, plan = result
+        rel = result
 
         payment_method = db.session.execute(
             select(PaymentMethods).where(PaymentMethods.user_id == rel.client_user_id)
         ).scalar_one_or_none()
 
-        current_status = StatusEnumList.issued
-        now_utc = datetime.now(timezone.utc)
+        current_status = StatusEnumList.issued 
+        now_utc = datetime.now(timezone.utc) 
 
         new_invoice = Invoices(
-            relationship_id=rel.relationship_id,
-            payment_method_id=payment_method.payment_method_id if payment_method else None,
-            status=current_status,
-            currency="USD",
-            subtotal=plan.amount, 
-            created_at=now_utc,
-            issued_at=now_utc if current_status == StatusEnumList.issued else None
+            relationship_id=rel.relationship_id, 
+            payment_method_id=payment_method.payment_method_id if payment_method else None, 
+            status=current_status, 
+            currency="USD", 
+            subtotal=input_amount, 
+            created_at=now_utc, 
+            issued_at=now_utc 
         )
 
         db.session.add(new_invoice)
@@ -1002,20 +1002,18 @@ class CoachGenerateInvoice(MethodView):
             user_id=rel.client_user_id,
             type_slug="invoice-update",
             title="Invoice Generated",
-            body=f"New invoice for ${plan.amount} issued by Coach {coach_user.first_name}."
+            body=f"New invoice for ${input_amount} issued by Coach {coach_user.first_name}."
         )
 
         db.session.commit()
 
         return {
             "message": "Invoice generated and client notified",
-            "invoice_id": new_invoice.invoice_id,
-            "status": new_invoice.status.value,
-            "amount": float(plan.amount)
+            "invoice_id": new_invoice.invoice_id, #
+            "status": new_invoice.status.value, #
+            "amount": float(input_amount)
         }, 201
     
-
-from sqlalchemy.orm import aliased
 
 @coach_blp.route("/invoices")
 class CoachInvoiceList(MethodView):
@@ -1024,12 +1022,10 @@ class CoachInvoiceList(MethodView):
         current_auth_id = get_jwt_identity()
         coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
         
-        client_user = aliased(Users)
-        
         query = (
-            select(Invoices, client_user.first_name, client_user.last_name)
+            select(Invoices, Users.first_name, Users.last_name)
             .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
-            .join(client_user, CoachClientRelationships.client_user_id == client_user.user_id)
+            .join(Users, CoachClientRelationships.client_user_id == Users.user_id)
             .where(
                 CoachClientRelationships.coach_profile_id.in_(
                     select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
@@ -1045,9 +1041,9 @@ class CoachInvoiceList(MethodView):
                 {
                     "invoice_id": inv.invoice_id,
                     "relationship_id": inv.relationship_id,
-                    "client_name": f"{fname} {lname}", 
+                    "client_name": f"{fname} {lname}",
                     "amount": float(inv.subtotal),
-                    "status": inv.status.value, 
+                    "status": inv.status.value,
                     "created_at": inv.created_at.isoformat()
                 } for inv, fname, lname in results
             ]
