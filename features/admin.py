@@ -2,9 +2,9 @@ from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, AccountDeletionInfo, ClientProfiles, CoachReviews
 from db import db
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
@@ -134,6 +134,7 @@ class AdminPurgeUserView(MethodView):
         db.session.commit()
         return {"message": "User purged successfully."}  
     
+    
 @admin_blp.route("/users")
 class AdminUsersView(MethodView):
     @admin_blp.arguments(UserQuerySchema, location="query")
@@ -162,6 +163,7 @@ class AdminUsersView(MethodView):
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
         return paginated.items
+    
     
 @admin_blp.route("/users/stats")
 class AdminUserStatsView(MethodView):
