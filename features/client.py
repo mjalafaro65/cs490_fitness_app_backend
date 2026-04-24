@@ -3,14 +3,15 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
-from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema
+from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
 from models.invoices import Invoices
 
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
-from models import Users
+from models import Users, Goals
 from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
@@ -706,6 +707,65 @@ class ReviewInteractionView(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
+
+@client_blp.route("/create-goal")
+class CreateGoalView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(CreateGoalSchema)
+    @client_blp.response(201, CreateGoalSchema)
+    def post(self, data):
+        user_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=user_id).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        goal = Goals(
+            for_user_id=data['for_user_id'],
+            created_by_user_id=user.user_id,
+            goal_type=data['goal_type'],
+            title=data['title'],
+            target_value=data['target_value'],
+            unit=data['unit'],
+            start_date=data['start_date'],
+            end_date=data['end_date'],
+            status=data['status'],
+            description=data.get('description')
+        )
+
+        try:
+            db.session.add(goal)
+            db.session.commit()
+            return goal
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Failed to create goal.")
+
+@client_blp.route("/goal/<int:goal_id>")
+class EditGoalView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(EditGoalSchema)
+    @client_blp.response(200, EditGoalSchema)
+    def patch(self, data, goal_id):
+        user_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=user_id).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        goal = Goals.query.get_or_404(goal_id)
+        if goal.created_by_user_id != user.user_id and goal.for_user_id != user.user_id:
+            abort(403, description="You do not have permission to edit this goal.")
+
+        if data:
+            for key, value in data.items():
+                setattr(goal, key, value)
+            goal.updated_at = datetime.utcnow()
+
+        try:
+            db.session.commit()
+            return goal
+        except Exception:
+            db.session.rollback()
+            abort(500, description="An error occurred while updating the goal.")
             
             
 # <<<<<<< Coach-favorite-feature

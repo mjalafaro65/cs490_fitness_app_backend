@@ -1,5 +1,6 @@
 from marshmallow import Schema, fields, validate
 from models.coach_client_relationships import status_enum
+from models.goals import GoalType, StatusEnum
 from .coach_schema import CoachProfileSchema, PaymentPlanSchema
 
 
@@ -103,3 +104,33 @@ class ProgressAnalyticsSchema(Schema):
     user_id = fields.Int(dump_only=True)
     history = fields.List(fields.Nested(DailySurveySchema), dump_only=True)
     
+
+class CreateGoalSchema(Schema):
+    goal_id = fields.Int(dump_only=True)
+    for_user_id = fields.Int(required=True)
+    created_by_user_id = fields.Int(dump_only=True)
+    goal_type = fields.Str(validate=validate.OneOf([e.value for e in GoalType]))
+    status = fields.Str(validate=validate.OneOf([e.value for e in StatusEnum]), load_default="active")
+    title = fields.Str(required=True, validate=validate.Length(max=100))
+    target_value = fields.Decimal(as_string=True, places=2)
+    unit = fields.Str(validate=validate.Length(max=20))
+    start_date = fields.Date()
+    end_date = fields.Date()
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+    description = fields.Str(validate=validate.Length(max=1000))
+
+class EditGoalSchema(Schema):
+    goal_id = fields.Int(dump_only=True)
+    for_user_id = fields.Int()
+    created_by_user_id = fields.Int(dump_only=True)
+    goal_type = fields.Str(validate=validate.OneOf([e.value for e in GoalType]))
+    status = fields.Str(validate=validate.OneOf([e.value for e in StatusEnum]), load_default="active")
+    title = fields.Str(validate=validate.Length(max=100))
+    target_value = fields.Decimal(as_string=True, places=2)
+    unit = fields.Str(validate=validate.Length(max=20))
+    start_date = fields.Date()
+    end_date = fields.Date()
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+    description = fields.Str(validate=validate.Length(max=1000))
