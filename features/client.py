@@ -445,6 +445,7 @@ class ClientHireRequestStatusView(MethodView):
             abort(403, description="Not allowed ")
 
         return hire_request
+
     
 
 
