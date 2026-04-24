@@ -8,7 +8,10 @@ def create_notification(user_id=None, role_id=None, type_slug=None, title=None, 
     
     if notif_type:
         new_notif = Notifications(
+            ##individual uer sees notification(optional)
             user_id=user_id,
+            
+            #group of (admins/coaches/clients) sees the notification
             role_id=role_id,
             notification_type_id=notif_type.notification_type_id,
             title=title,

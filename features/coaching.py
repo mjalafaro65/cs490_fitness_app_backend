@@ -2,16 +2,21 @@ from datetime import datetime
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema
 from schemas.client_schema import ReviewCoachSchema
+from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
-from schemas.client_schema import DailySurveySchema
+from models.coach_hire_requests import StatusEnum
+from models.invoices import StatusEnumList
+from schemas.client_schema import DailySurveySchema, HireRequestStatusSchema
 from models.coach_profiles import ApprovalStatusEnum
+from models.coach_client_relationships import status_enum
 from .utils import create_notification
+from datetime import datetime, timezone
 
 
 
@@ -171,9 +176,10 @@ class InitSpecialties(MethodView):
 
         return specialties
 
+
 @coach_blp.route("/coach-profile")
 class CoachProfileView(MethodView):
-    @jwt_required()
+    @jwt_required(optional=True)
     @coach_blp.arguments(CoachProfileQuerySchema, location="query")
     @coach_blp.response(200, CoachProfileSchema)
     def get(self,args):
@@ -183,18 +189,22 @@ class CoachProfileView(MethodView):
         Admin/Client: Calls /coach-profile?user_id=10 (gets specific user).
         """
         curr_auth_id = get_jwt_identity()
-        result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
-        curr_user_id = result[0] if result else None
-        
-        if not curr_user_id:
-            abort(401, description="User not found.")
+
+
+        if curr_auth_id:
+            result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
+            curr_user_id = result[0] if result else None
+        else:
+            curr_user_id=None            
 
        
         target_user_id = args.get("user_id")
 
+        if not target_user_id and not curr_auth_id:
+            return {"message": "user_id not obtained"}, 404
+
         #if target id is provided check if its the logged in user
         #######need to check if its admin or client doing the call
-        print(target_user_id, curr_user_id)
         if target_user_id and target_user_id != curr_user_id:
             
             profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
@@ -208,6 +218,7 @@ class CoachProfileView(MethodView):
             return {"message":"Coach profile not found."}, 404
         
         return profile
+    
     
     @jwt_required()
     @coach_blp.arguments(CoachProfileSchema(load_instance=False, exclude=("status",)))
@@ -679,19 +690,73 @@ class CoachReviewsPublic(MethodView):
         return CoachReviews.query.filter_by(
             coach_profile_id=coach_id
         ).all()
-            
-@coach_blp.route("/favorite")
-class FavoriteCoach(MethodView):
-    @jwt_required()
-    @coach_blp.arguments(FavoriteCoachSchema)
-    @coach_blp.response(200, FavoriteCoachSchema)
-    def post(self, data):
-        auth_id = get_jwt_identity()
-        user = Users.query.filter_by(auth_id=auth_id).first_or_404()
+    
 
-        existing_favorite = CoachFavorites.query.filter_by(
-            user_id=user.user_id,
-            coach_profile_id=data['coach_profile_id']
+@coach_blp.route("/pending-requests")
+class CoachPendingRequestsView(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        if not coach_profile:
+            abort(404, description="Coach profile not found")
+
+        results = db.session.execute(
+            select(
+                CoachHireRequests, 
+                PaymentPlans.name, 
+                PaymentPlans.billing_type
+            )
+            .join(PaymentPlans, CoachHireRequests.payment_plan_id == PaymentPlans.payment_plan_id)
+            .where(
+                CoachHireRequests.coach_profile_id == coach_profile.coach_profile_id,
+                CoachHireRequests.status == StatusEnum.pending
+            )
+        ).all()
+
+        return [{
+            "request_id": row.CoachHireRequests.request_id,
+            "client_user_id": row.CoachHireRequests.client_user_id,
+            "status": row.CoachHireRequests.status.value,
+            "created_at": row.CoachHireRequests.created_at.isoformat(),
+            "plan_name": row.name,          
+            "billing_type": row.billing_type.value 
+        } for row in results]
+            
+
+
+@coach_blp.route("/hire-request/<int:request_id>")
+class CoachHireRequestDetailView(MethodView):
+    @jwt_required()
+    def get(self, request_id):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        coach_profile = db.session.execute(
+            select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
+        ).scalar_one_or_none()
+
+        result = db.session.execute(
+            select(
+                CoachHireRequests, 
+                Users.first_name, 
+                Users.last_name, 
+                Users.phone_number, 
+                Users.is_active,
+                PaymentPlans.name,
+                PaymentPlans.billing_type
+            )
+            .join(Users, CoachHireRequests.client_user_id == Users.user_id)
+            .join(PaymentPlans, CoachHireRequests.payment_plan_id == PaymentPlans.payment_plan_id)
+            .where(
+                CoachHireRequests.request_id == request_id,
+                CoachHireRequests.coach_profile_id == coach_profile.coach_profile_id
+            )
         ).first()
 
         if not result:
@@ -819,8 +884,10 @@ class CoachActiveRosterView(MethodView):
             select(
                 CoachClientRelationships.relationship_id,
                 CoachClientRelationships.status,
+                Users.user_id, 
                 Users.first_name, 
                 Users.last_name, 
+                PaymentPlans.payment_plan_id,
                 PaymentPlans.name, 
                 PaymentPlans.billing_type
             )
@@ -834,11 +901,20 @@ class CoachActiveRosterView(MethodView):
         active_roster = []
         for row in results:
             active_roster.append({
-                "relationship_id": row.relationship_id,
-                "client_name": f"{row.first_name} {row.last_name}",
-                "plan_name": row.name,
-                "billing_type": row.billing_type.value,
-                "status": row.status.value
+               
+                    "relationship_id": row.relationship_id,
+                    "user": {
+                        "user_id": row.user_id,
+                        "first_name": row.first_name,
+                        "last_name": row.last_name,
+                    },
+                    "plan": {
+                        "plan_id": row.payment_plan_id,
+                        "name": row.name,
+                        "billing_type": row.billing_type.value
+                    },
+                    "status": row.status.value
+                
             })
 
         return active_roster
@@ -890,7 +966,136 @@ class CoachManageClientStatus(MethodView):
             "message": f"Coach changed client relationship to {relationship.status.value}",
             "coach_client_relationship": relationship.relationship_id
         }
+    
 
+@coach_blp.route("/generate-invoice")
+class CoachGenerateInvoice(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(CreateInvoiceSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        rel_id = data.get("relationship_id")
+        input_amount = data.get("amount")
+
+        result = db.session.execute(
+            select(CoachClientRelationships)
+            .where(
+                CoachClientRelationships.relationship_id == rel_id,
+                CoachClientRelationships.status == status_enum.active, #
+                CoachClientRelationships.coach_profile_id.in_(
+                    select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not result:
+            abort(404, description="Active relationship not found or unauthorized")
+
+        rel = result
+
+        payment_method = db.session.execute(
+            select(PaymentMethods).where(PaymentMethods.user_id == rel.client_user_id)
+        ).scalar_one_or_none()
+
+        current_status = StatusEnumList.issued 
+        now_utc = datetime.now(timezone.utc) 
+
+        new_invoice = Invoices(
+            relationship_id=rel.relationship_id, 
+            payment_method_id=payment_method.payment_method_id if payment_method else None, 
+            status=current_status, 
+            currency="USD", 
+            subtotal=input_amount, 
+            created_at=now_utc, 
+            issued_at=now_utc 
+        )
+
+        db.session.add(new_invoice)
+        db.session.flush() 
+
+        create_notification(
+            user_id=rel.client_user_id,
+            type_slug="invoice-update",
+            title="Invoice Generated",
+            body=f"New invoice for ${input_amount} issued by Coach {coach_user.first_name}."
+        )
+
+        db.session.commit()
+
+        return {
+            "message": "Invoice generated and client notified",
+            "invoice_id": new_invoice.invoice_id, #
+            "status": new_invoice.status.value, #
+            "amount": float(input_amount)
+        }, 201
+    
+
+@coach_blp.route("/invoices")
+class CoachInvoiceList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        query = (
+            select(Invoices, Users.first_name, Users.last_name)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .join(Users, CoachClientRelationships.client_user_id == Users.user_id)
+            .where(
+                CoachClientRelationships.coach_profile_id.in_(
+                    select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
+                )
+            )
+            .order_by(Invoices.created_at.desc())
+        )
+
+        results = db.session.execute(query).all()
+
+        return {
+            "invoices": [
+                {
+                    "invoice_id": inv.invoice_id,
+                    "relationship_id": inv.relationship_id,
+                    "client_name": f"{fname} {lname}",
+                    "amount": float(inv.subtotal),
+                    "status": inv.status.value,
+                    "created_at": inv.created_at.isoformat()
+                } for inv, fname, lname in results
+            ]
+        }
+
+
+@coach_blp.route("/update-status")
+class UpdateInvoiceStatus(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(UpdateInvoiceStatusSchema)
+    def patch(self, data):
+        invoice = Invoices.query.get_or_404(data["invoice_id"])
+        
+        if invoice.status == StatusEnumList.paid:
+            return {"message": "Invoice already paid. Suggest refund workflow."}, 400
+
+        relationship = CoachClientRelationships.query.get(invoice.relationship_id)
+
+        old_status = invoice.status.value
+        invoice.status = data["new_status"]
+        db.session.commit()
+        
+        if relationship:
+            create_notification(
+                user_id=relationship.client_user_id,
+                type_slug="invoice-update",
+                title="Invoice Status Changed",
+                body=f"Your invoice #{invoice.invoice_id} has been updated from {old_status} to {invoice.status.value}."
+            )
+
+        return {
+            "message": f"Status updated to {invoice.status.value}",
+            "invoice_id": invoice.invoice_id
+        }
+      
 @coach_blp.route("/favorite")
 class FavoriteCoach(MethodView):
     @jwt_required()

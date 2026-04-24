@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from models.coach_hire_requests import StatusEnum
 from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
+from .utils import create_notification
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -258,7 +259,6 @@ class EditDailyView(MethodView):
 
 @client_blp.route("/coach-payment-plans/<int:coach_profile_id>")
 class ClientPaymentPlanListView(MethodView):
-    @jwt_required()
     @client_blp.response(200, PaymentPlanSchema(many=True))
     def get(self,coach_profile_id):
         profile = CoachProfiles.query.get_or_404(coach_profile_id)
@@ -338,6 +338,13 @@ class ClientHireRequestCreateView(MethodView):
             auto_pay_enabled=auto_pay_enabled
         )
 
+        create_notification(
+                user_id=user.user_id,
+                type_slug="coach-request",
+                title="New Coach Hire",
+                body=f"Your new requests has been received and the coach will be made aware"
+            )
+
         try:
             db.session.add(new_request)
             db.session.commit()
@@ -379,6 +386,13 @@ class ClientHireRequestDetailView(MethodView):
             }, 400
         try:
             hire_request.status = StatusEnum.canceled
+
+            create_notification(
+                user_id=current_user.user_id,
+                type_slug="coach-request-canceled",
+                title="Cancel Coach Request",
+                body=f"Your coach hire request has been canceled"
+            )
             
             db.session.commit()
             print(f"SUCCESS: Request {request_id} set to canceled")
@@ -415,7 +429,7 @@ class ClientHireRequestStatusView(MethodView):
     @jwt_required()
     @client_blp.response(200, HireRequestStatusSchema)
     def get(self, request_id):
-        current_user_id = get_jwt_identity()
+        current_user_id = _current_user()
 
         hire_request = db.session.execute(
             select(CoachHireRequests).where(
@@ -426,10 +440,16 @@ class ClientHireRequestStatusView(MethodView):
         if not hire_request:
             abort(404, description="Hire request not found")
 
-        if int(hire_request.client_user_id) != int(current_user_id):
-            abort(403, description="Not allowed")
+        if int(hire_request.client_user_id) != int(current_user_id.user_id):
+            #print(hire_request.client_user_id + " != " + current_user_id)
+            abort(403, description="Not allowed ")
 
         return hire_request
+
+    
+
+
+
 ### Client Reviews Coach
 @client_blp.route("/review-coach/<int:coach_id>")
 class ReviewCoachView(MethodView):
@@ -590,6 +610,7 @@ class CoachFavoriteView(MethodView):
 class FavoriteCoachesView(MethodView):
 
     @jwt_required()
+    @client_blp.response(200, CoachProfileSchema(many=True) )
     def get(self):
         """Get user's favorite coaches"""
         current_auth_id = get_jwt_identity()
