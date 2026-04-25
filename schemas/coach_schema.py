@@ -153,6 +153,54 @@ class PaymentPlanSchema(Schema):
 
 
 
+# Dashboard Schemas
+class ClientBasicInfoSchema(Schema):
+    user_id = fields.Int(dump_only=True)
+    first_name = fields.Str(dump_only=True)
+    last_name = fields.Str(dump_only=True)
+    relationship_start_date = fields.DateTime(dump_only=True)
+    relationship_status = fields.Str(dump_only=True)
+
+
+class ProgressSummarySchema(Schema):
+    avg_energy_level = fields.Float(dump_only=True)
+    avg_mood_score = fields.Float(dump_only=True)
+    avg_sleep_hours = fields.Float(dump_only=True)
+    workout_completion_rate = fields.Float(dump_only=True)
+    nutrition_logging_rate = fields.Float(dump_only=True)
+    active_goals_count = fields.Int(dump_only=True)
+    completed_goals_count = fields.Int(dump_only=True)
+    total_workouts_completed = fields.Int(dump_only=True)
+    days_tracked = fields.Int(dump_only=True)
+
+
+class RecentActivitySchema(Schema):
+    date = fields.Date(dump_only=True)
+    activity_type = fields.Str(dump_only=True)
+    description = fields.Str(dump_only=True)
+    details = fields.Dict(dump_only=True)
+
+
+class GoalStatusSchema(Schema):
+    goal_id = fields.Int(dump_only=True)
+    description = fields.Str(dump_only=True)
+    status = fields.Str(dump_only=True)
+    progress_percentage = fields.Float(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+    target_date = fields.DateTime(dump_only=True, allow_none=True)
+
+
+class ClientDashboardSchema(Schema):
+    client_info = fields.Nested(ClientBasicInfoSchema)
+    progress_summary = fields.Nested(ProgressSummarySchema)
+    recent_activity = fields.List(fields.Nested(RecentActivitySchema))
+    goals_status = fields.List(fields.Nested(GoalStatusSchema))
+
+
+class ClientListSchema(Schema):
+    clients = fields.List(fields.Nested(ClientDashboardSchema))
+
+
 #class CoachFiltering(Schema):
 #    pass
 
@@ -165,6 +213,45 @@ class AssignWorkoutPlanSchema(Schema):
     end_date = fields.Date()
     repeat_rules = fields.Str(validate=validate.OneOf(['none', 'daily', 'weekly', 'monthly']), required=True)
     status = fields.Str(validate=validate.OneOf(['active', 'completed', 'cancelled']), required=True)
+
+
+class WeeklyWorkoutDaySchema(Schema):
+    weekday = fields.Int(required=True, validate=validate.Range(min=1, max=7))
+    session_time = fields.Time(required=False, allow_none=True)
+    exercises = fields.List(fields.Dict(), required=True)
+    notes = fields.Str(required=False, allow_none=True)
+
+
+class ClientWorkoutPlanCreateSchema(Schema):
+    name = fields.Str(required=True, validate=validate.Length(max=120))
+    description = fields.Str(required=False, allow_none=True)
+    weekly_schedule = fields.List(fields.Nested(WeeklyWorkoutDaySchema), required=True)
+    start_date = fields.Date(required=True)
+    end_date = fields.Date(required=False, allow_none=True)
+    repeat_rule = fields.Str(validate=validate.OneOf(['none', 'weekly', 'biweekly']), required=False)
+    intensity_notes = fields.Str(required=False, allow_none=True)
+
+
+class ClientWorkoutPlanSchema(Schema):
+    plan_id = fields.Int(dump_only=True)
+    name = fields.Str(dump_only=True)
+    description = fields.Str(dump_only=True)
+    owner_user_id = fields.Int(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+    weekly_schedule = fields.List(fields.Nested(WeeklyWorkoutDaySchema), dump_only=True)
+    assignment_id = fields.Int(dump_only=True)
+    assigned_to_client_id = fields.Int(dump_only=True)
+    assigned_by_coach_id = fields.Int(dump_only=True)
+    start_date = fields.Date(dump_only=True)
+    end_date = fields.Date(dump_only=True, allow_none=True)
+    repeat_rule = fields.Str(dump_only=True)
+    status = fields.Str(dump_only=True)
+
+
+class ClientWorkoutAssignmentsSchema(Schema):
+    assignments = fields.List(fields.Nested(ClientWorkoutPlanSchema), dump_only=True)
+    total_active = fields.Int(dump_only=True)
+    total_completed = fields.Int(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
 
 class AssignMealPlanSchema(Schema):
