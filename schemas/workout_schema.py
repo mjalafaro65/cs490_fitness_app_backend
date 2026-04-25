@@ -7,7 +7,6 @@ class ExerciseCreateSchema(Schema):
     equipment = fields.Str(required=True, validate=validate.Length(max=60))
     training_type = fields.Str(required=True, validate=validate.Length(max=60))
     description = fields.Str(required=False, allow_none=True)
-    keywords = fields.Str(required=False, allow_none=True)  # Add keywords field
     is_public = fields.Bool(load_default=False)
 
 
@@ -17,7 +16,6 @@ class ExerciseUpdateSchema(Schema):
     equipment = fields.Str(required=False, validate=validate.Length(max=60))
     training_type = fields.Str(required=False, validate=validate.Length(max=60))
     description = fields.Str(required=False, allow_none=True)
-    keywords = fields.Str(required=False, allow_none=True)  # Add keywords field
     is_public = fields.Bool(required=False)
 
 
@@ -26,8 +24,6 @@ class ExerciseListQuerySchema(Schema):
     muscle_group = fields.Str(required=False)
     equipment = fields.Str(required=False)
     training_type = fields.Str(required=False)
-    keywords = fields.Str(required=False)  # Add keywords filtering
-    sort_by = fields.Str(required=False, validate=validate.OneOf(["name", "created_at", "muscle_group", "equipment"]))  # Add sorting options
 
 
 class PlanCreateSchema(Schema):
@@ -135,15 +131,30 @@ class PlanCalendarSchema(Schema):
     occurrences = fields.List(fields.Nested(CalendarOccurrenceSchema), required=True)
 from marshmallow import Schema, fields, validate
 
-class WorkoutLogSchema(Schema):
+class WorkoutLogEntrySchema(Schema):
+    workout_log_entry_id= fields.Int(dump_only=True)
+    calendar_workout_id = fields.Int(required=True)
+    plan_day_exercise_id = fields.Int(allow_none=True)
     exercise_id = fields.Int(required=True)
-    plan_day_exercise_id = fields.Int(dump_only=True)
-    sets = fields.Int(validate=validate.Range(min=0))
-    reps = fields.Int(validate=validate.Range(min=0))
-    weight = fields.Float(validate=validate.Range(min=0))
-    rpe = fields.Int(validate=validate.Range(min=0))
-    distance = fields.Float(validate=validate.Range(min=0))
-    calories = fields.Float(validate=validate.Range(min=0))
-    duration_minutes = fields.Float(validate=validate.Range(min=0))
-    notes = fields.Str(validate=validate.Length(max=1000))
 
+    sets = fields.Int(allow_none=True)
+    reps = fields.Int(allow_none=True)
+    weight = fields.Float(allow_none=True)
+    rpe = fields.Float(allow_none=True)
+    distance = fields.Float(allow_none=True)
+    duration_minutes = fields.Float(allow_none=True)
+    notes = fields.Str(allow_none=True)
+
+class WorkoutLogSchema(Schema):
+    workout_log_id = fields.Int(dump_only=True)
+    user_id =fields.Int(allow_none=True)
+    calendar_workout_id = fields.Int(allow_none=True)
+    notes = fields.Str()
+
+    entries = fields.List(fields.Nested(WorkoutLogEntrySchema))
+
+
+    
+class WorkoutLogQuerySchema(Schema):
+    client_id = fields.Int(allow_none=True)
+    calendar_workout_id = fields.Int(required=False)
