@@ -10,6 +10,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    env:
+      SQLALCHEMY_DATABASE_URI: "sqlite:///:memory:"
+      JWT_SECRET_KEY: "dummy-secret-key"
     
     steps:
       # Gets the code from the repository
@@ -20,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.14'
 
       # Install dependencies
       - name: Install dependencies
