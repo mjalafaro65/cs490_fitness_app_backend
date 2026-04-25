@@ -11,6 +11,7 @@ class Exercises(db.Model):
     equipment = db.Column(db.String(60), nullable=False)
     training_type = db.Column(db.String(60), nullable=False)
     description = db.Column(db.Text)
+    keywords = db.Column(db.Text, nullable=True)  # JSON array or comma-separated values
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # NULL creator = catalog / default exercise; set for user-created moves
