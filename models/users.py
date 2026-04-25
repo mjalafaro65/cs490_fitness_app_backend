@@ -132,6 +132,9 @@ class Users(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     disabled_at = db.Column(db.DateTime, nullable=True)
     disabled_by_admin_user_id = db.Column(db.Integer, nullable=True)
+    
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+    
+    
     

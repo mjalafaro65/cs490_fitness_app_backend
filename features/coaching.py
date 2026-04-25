@@ -539,6 +539,9 @@ class CoachBrowse(MethodView):
 
 @coach_blp.route("/coachbrowse/filters")
 class CoachBrowseFilter(MethodView):
+    """
+        Searching based on arguments bellow
+    """
 
     @coach_blp.arguments(CoachBrowsingQuery, location="query")
     @coach_blp.response(200, CoachBrowsingSchema(many=True))
@@ -588,6 +591,9 @@ class CoachAvailabilityView(MethodView):
     @coach_blp.arguments(CoachAvailabilitySchema)
     @coach_blp.response(201, CoachAvailabilitySchema)
     def post(self, data):
+        """
+        Coach sets their availability
+        """
         curr_auth_id = 20
 
         user = Users.query.filter_by(auth_id=curr_auth_id).first()
@@ -661,6 +667,9 @@ class CoachAvailabilityEditView(MethodView):
     @coach_blp.arguments(CoachAvailabilitySchema)
     @coach_blp.response(200, CoachAvailabilitySchema)
     def put(self, data, availability_id):
+        """
+        VCoach updates their availability
+        """
 
         user = Users.query.filter_by(auth_id=get_jwt_identity()).first()
         coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
@@ -711,9 +720,13 @@ class CoachAvailabilityEditView(MethodView):
     
 @coach_blp.route("/coach/<int:coach_profile_id>/availability")
 class CoachAvailabilityPublicView(MethodView):
+     
 
     @coach_blp.response(200, CoachAvailabilitySchema(many=True))
     def get(self, coach_profile_id):
+        """
+        Visitor gets coach availability
+        """
 
         availability = CoachAvailability.query.filter_by(
             coach_profile_id=coach_profile_id
