@@ -1185,12 +1185,13 @@ class CoachGenerateInvoice(MethodView):
         
         rel_id = data.get("relationship_id")
         input_amount = data.get("amount")
+        input_pay_date = data.get("pay_date")
 
         result = db.session.execute(
             select(CoachClientRelationships)
             .where(
                 CoachClientRelationships.relationship_id == rel_id,
-                CoachClientRelationships.status == status_enum.active, #
+                CoachClientRelationships.status == status_enum.active,
                 CoachClientRelationships.coach_profile_id.in_(
                     select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
                 )
@@ -1206,17 +1207,17 @@ class CoachGenerateInvoice(MethodView):
             select(PaymentMethods).where(PaymentMethods.user_id == rel.client_user_id)
         ).scalar_one_or_none()
 
-        current_status = StatusEnumList.issued 
-        now_utc = datetime.now(timezone.utc) 
-
+        now_utc = datetime.now(timezone.utc)
+        
         new_invoice = Invoices(
-            relationship_id=rel.relationship_id, 
-            payment_method_id=payment_method.payment_method_id if payment_method else None, 
-            status=current_status, 
-            currency="USD", 
-            subtotal=input_amount, 
-            created_at=now_utc, 
-            issued_at=now_utc 
+            relationship_id=rel.relationship_id,
+            payment_method_id=payment_method.payment_method_id if payment_method else None,
+            status=StatusEnumList.issued,
+            currency="USD",
+            subtotal=input_amount,
+            created_at=now_utc,
+            issued_at=now_utc,
+            pay_date=input_pay_date 
         )
 
         db.session.add(new_invoice)
@@ -1233,9 +1234,10 @@ class CoachGenerateInvoice(MethodView):
 
         return {
             "message": "Invoice generated and client notified",
-            "invoice_id": new_invoice.invoice_id, #
-            "status": new_invoice.status.value, #
-            "amount": float(input_amount)
+            "invoice_id": new_invoice.invoice_id,
+            "status": new_invoice.status.value,
+            "amount": float(input_amount),
+            "pay_date": new_invoice.pay_date.isoformat() if new_invoice.pay_date else None
         }, 201
     
 

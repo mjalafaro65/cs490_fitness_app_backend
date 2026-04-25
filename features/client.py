@@ -17,6 +17,7 @@ from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
 from datetime import datetime, timezone
 
+from models.invoices import StatusEnumList
 from models.coach_hire_requests import StatusEnum
 from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
 from .utils import create_notification
@@ -787,6 +788,40 @@ class EditGoalView(MethodView):
         except Exception:
             db.session.rollback()
             abort(500, description="An error occurred while updating the goal.")
+
+
+
+@client_blp.route("/unpaid-invoices")
+class ClientInvoiceList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        client_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        query = (
+            select(Invoices, Users.first_name, Users.last_name)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
+            .join(Users, CoachProfiles.user_id == Users.user_id)
+            .where(CoachClientRelationships.client_user_id == client_user.user_id)
+            .order_by(Invoices.created_at.desc())
+        )
+
+        results = db.session.execute(query).all()
+
+        return {
+            "invoices": [
+                {
+                    "invoice_id": inv.invoice_id,
+                    "coach_name": f"{fname} {lname}",
+                    "amount": float(inv.subtotal),
+                    "status": inv.status.value,
+                    "created_at": inv.created_at.isoformat(),
+                    "pay_date": inv.pay_date.isoformat() if inv.pay_date else None,
+                    "is_payable": inv.status in [StatusEnumList.issued, StatusEnumList.past_due]
+                } for inv, fname, lname in results
+            ]
+        }
             
             
 # <<<<<<< Coach-favorite-feature
