@@ -1,4 +1,9 @@
+import os 
 import pytest
+
+os.environ["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+os.environ["JWT_SECRET_KEY"] = "super-secret-test-key"
+
 from app import app as flask_app 
 from db import db
 
