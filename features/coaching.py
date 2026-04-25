@@ -563,19 +563,18 @@ class CoachBrowseFilter(MethodView):
         )\
         .join(Users, CoachProfiles.user_id == Users.user_id)\
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)\
+        .outerjoin(PaymentPlans)\
+        .outerjoin(CoachAvailability)\
         .filter(CoachProfiles.status == ApprovalStatusEnum.approved)
 
         if min_price is not None:
-            query = query.join(PaymentPlans)\
-                .filter(PaymentPlans.amount >= min_price)
+            query = query.filter(PaymentPlans.amount >= min_price)
 
         if max_price is not None:
-            query = query.join(PaymentPlans)\
-                .filter(PaymentPlans.amount <= max_price)
+            query = query.filter(PaymentPlans.amount <= max_price)
 
         if day_of_week is not None:
-            query = query.join(CoachAvailability)\
-                .filter(CoachAvailability.day_of_week == day_of_week)
+            query = query.filter(CoachAvailability.day_of_week == day_of_week)
 
         if specialty_id:
             query = query.filter(CoachProfiles.specialty_id == specialty_id)
