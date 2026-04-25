@@ -3,17 +3,16 @@ from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
-from schemas.client_schema import ReviewCoachSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema
+from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
 from models.coach_hire_requests import StatusEnum
 from models.invoices import StatusEnumList
-from schemas.client_schema import DailySurveySchema, HireRequestStatusSchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_client_relationships import status_enum
 from .utils import create_notification
@@ -1338,3 +1337,152 @@ class FavoriteCoach(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description="Failed to favorite coach.")
+
+
+@coach_blp.route("/clients/<int:client_id>/workouts/plan")
+class ClientWorkoutPlanCreation(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(ClientWorkoutPlanCreateSchema)
+    @coach_blp.response(201, ClientWorkoutPlanSchema)
+    def post(self, client_id, data):
+        """Create complete workout plan for client with weekly schedule"""
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        coach_profile = get_coach_profile_from_user(coach_user)
+        
+        if not coach_profile:
+            abort(403, description="Coach profile required.")
+        
+        # Verify coach is employed by client
+        if not is_coach_employed_by_client(coach_user.user_id, client_id):
+            abort(403, description="Not authorized to create workouts for this client.")
+        
+        # Create workout plan
+        workout_plan = WorkoutPlans(
+            owner_user_id=coach_user.user_id,
+            name=data['name'],
+            description=data.get('description'),
+            is_public=False
+        )
+        db.session.add(workout_plan)
+        db.session.flush()  # Get plan_id
+        
+        # Create workout days based on weekly schedule
+        for day_schedule in data['weekly_schedule']:
+            workout_day = WorkoutPlanDays(
+                plan_id=workout_plan.plan_id,
+                weekday=day_schedule['weekday'],
+                session_time=day_schedule.get('session_time')
+            )
+            db.session.add(workout_day)
+            db.session.flush()  # Get day_id
+            
+            # Add exercises to the day
+            for exercise_data in day_schedule['exercises']:
+                day_exercise = WorkoutPlanDayExercises(
+                    day_id=workout_day.plan_day_id,
+                    exercise_id=exercise_data['exercise_id'],
+                    sets=exercise_data['sets'],
+                    reps=exercise_data['reps'],
+                    weight=exercise_data.get('weight'),
+                    duration_minutes=exercise_data.get('duration_minutes'),
+                    notes=exercise_data.get('notes'),
+                    sort_order=exercise_data.get('sort_order', 1)
+                )
+                db.session.add(day_exercise)
+        
+        # Create assignment
+        assignment = WorkoutPlanAssignments(
+            plan_id=workout_plan.plan_id,
+            assigned_to_user_id=client_id,
+            assigned_by_user_id=coach_user.user_id,
+            assignment_type='coach',
+            start_date=data['start_date'],
+            end_date=data.get('end_date'),
+            repeat_rule=data.get('repeat_rule', 'weekly'),
+            status='active'
+        )
+        db.session.add(assignment)
+        
+        try:
+            db.session.commit()
+            
+            # Return complete response
+            response_data = {
+                'plan_id': workout_plan.plan_id,
+                'name': workout_plan.name,
+                'description': workout_plan.description,
+                'owner_user_id': workout_plan.owner_user_id,
+                'created_at': workout_plan.created_at,
+                'weekly_schedule': data['weekly_schedule'],
+                'assignment_id': assignment.assignment_id,
+                'assigned_to_client_id': client_id,
+                'assigned_by_coach_id': coach_profile.coach_profile_id,
+                'start_date': data['start_date'],
+                'end_date': data.get('end_date'),
+                'repeat_rule': data.get('repeat_rule', 'weekly'),
+                'status': 'active'
+            }
+            return response_data
+            
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Failed to create workout plan: {str(e)}")
+
+
+@coach_blp.route("/clients/<int:client_id>/workouts/assigned")
+class ClientWorkoutAssignments(MethodView):
+    @jwt_required()
+    @coach_blp.response(200, ClientWorkoutAssignmentsSchema)
+    def get(self, client_id):
+        """Get all workout assignments for client"""
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        # Verify coach is employed by client
+        if not is_coach_employed_by_client(coach_user.user_id, client_id):
+            abort(403, description="Not authorized to view this client's workouts.")
+        
+        # Get all assignments for client created by this coach
+        assignments = db.session.query(
+            WorkoutPlanAssignments, WorkoutPlans
+        ).join(
+            WorkoutPlans, WorkoutPlanAssignments.plan_id == WorkoutPlans.plan_id
+        ).filter(
+            WorkoutPlanAssignments.assigned_to_user_id == client_id,
+            WorkoutPlanAssignments.assigned_by_user_id == coach_user.user_id
+        ).all()
+        
+        assignment_list = []
+        active_count = 0
+        completed_count = 0
+        
+        for assignment, plan in assignments:
+            assignment_data = {
+                'plan_id': plan.plan_id,
+                'name': plan.name,
+                'description': plan.description,
+                'owner_user_id': plan.owner_user_id,
+                'created_at': plan.created_at,
+                'weekly_schedule': [],  # Would need to fetch from WorkoutPlanDays
+                'assignment_id': assignment.assignment_id,
+                'assigned_to_client_id': client_id,
+                'assigned_by_coach_id': coach_user.user_id,
+                'start_date': assignment.start_date,
+                'end_date': assignment.end_date,
+                'repeat_rule': assignment.repeat_rule.value if assignment.repeat_rule else None,
+                'status': assignment.status.value if assignment.status else None
+            }
+            
+            assignment_list.append(assignment_data)
+            
+            if assignment.status == 'active':
+                active_count += 1
+            elif assignment.status == 'completed':
+                completed_count += 1
+        
+        return {
+            'assignments': assignment_list,
+            'total_active': active_count,
+            'total_completed': completed_count
+        }
