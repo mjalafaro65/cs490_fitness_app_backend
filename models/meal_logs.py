@@ -10,6 +10,8 @@ class MealLogs(db.Model):
     #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     meal_id = db.Column(db.Integer, ForeignKey('meals.meal_id'), nullable=False)
     logged_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    calories = db.Column(db.Integer, nullable=True)
+
     servings = db.Column(db.Numeric(6, 2), nullable=False)
     notes = db.Column(db.Text)
     
