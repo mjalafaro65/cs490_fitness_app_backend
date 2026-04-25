@@ -54,7 +54,7 @@ from schemas.workout_schema import (
     WorkoutLogSchema,
     WorkoutLogQuerySchema,
     CalendarWorkoutQuerySchema,
-    CalendarWorkoutSchema
+    CalendarViewSchema
 )
 
 workout_blp = Blueprint(
@@ -1054,15 +1054,15 @@ from datetime import datetime, timedelta
 @workout_blp.route("/calendar-workouts")
 class CalendarWorkoutsList(MethodView):
 
-    @jwt_required()
+    # @jwt_required()
     @workout_blp.arguments(CalendarWorkoutQuerySchema, location="query")
-    @workout_blp.response(200, CalendarWorkoutSchema(many=True))
+    @workout_blp.response(200, CalendarViewSchema(many=True))
 
     def get(self, query_data):
         """
          calendar workouts per day
         """
-        user = _current_user()
+        # user = _current_user()
         view = query_data.get("view")
         date = query_data.get("date")
 
@@ -1077,7 +1077,7 @@ class CalendarWorkoutsList(MethodView):
                 .joinedload(WorkoutPlanDays.exercises)
                 .joinedload(WorkoutPlanDayExercises.exercise)
             )
-            .filter(CalendarWorkouts.for_user_id == user.user_id)
+            .filter(CalendarWorkouts.for_user_id == 16)
         )
 
         if view == "today":
@@ -1111,16 +1111,7 @@ class CalendarWorkoutsList(MethodView):
 
         workouts = query.order_by(CalendarWorkouts.scheduled_start.asc()).all()
 
-        return [
-            {
-                "calendar_workout_id": w.calendar_workout_id,
-                "plan_day_id": w.plan_day_id,
-                "scheduled_start": w.scheduled_start,
-                "scheduled_end": w.scheduled_end,
-                "status": w.status
-            }
-            for w in workouts
-        ]
+        return workouts
 @workout_blp.route("/workout-logs")
 class MyWorkoutLogs(MethodView):
     @jwt_required(optional=True)

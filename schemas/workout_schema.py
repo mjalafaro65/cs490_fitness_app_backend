@@ -1,4 +1,7 @@
 from marshmallow import Schema, fields, validate, pre_load
+from models import Exercises,WorkoutPlanDayExercises, WorkoutPlans, CalendarWorkouts, WorkoutPlanDays
+from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+
 
 
 class ExerciseCreateSchema(Schema):
@@ -165,16 +168,19 @@ class CalendarWorkoutQuerySchema(Schema):
     date = fields.Date(required=False)
     view = fields.Str(required=False) 
 
-class ExerciseSchema(Schema):
-    class Meta:
-        fields = "__all__"
 
+class ExerciseSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = Exercises
+        load_instance = True
 
 class PlanDayExerciseSchema(Schema):
     exercise = fields.Nested(ExerciseSchema)
 
     class Meta:
-        fields = "__all__"
+        model = WorkoutPlanDayExercises
+        load_instance = True
+
 
 
 class PlanDaySchema(Schema):
@@ -182,11 +188,18 @@ class PlanDaySchema(Schema):
     plan = fields.Nested(lambda: PlanSchema())
 
     class Meta:
-        fields = "__all__"
+        model = WorkoutPlanDays
+        load_instance = True
+
+class PlanSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlans
+        load_instance = True
 
 
 class CalendarViewSchema(Schema):
     plan_day = fields.Nested(PlanDaySchema)
 
     class Meta:
-        fields = "__all__"
+        model = CalendarWorkouts
+        load_instance = True
