@@ -12,4 +12,10 @@ class WorkoutLogs(db.Model):
     logged_at = db.Column(db.DateTime, default=datetime.utcnow)
     notes = db.Column(db.Text)
 
+    entries = db.relationship(
+        "WorkoutLogEntries",
+        backref="log",
+        cascade="all, delete-orphan"
+    )
+
     

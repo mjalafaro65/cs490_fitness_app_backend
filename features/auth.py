@@ -186,7 +186,7 @@ class UserMe(MethodView):
 @auth_blp.route("/promote/<int:auth_id>")
 class AdminPromote(MethodView):
     @jwt_required()
-    # @roles_required('admin') <--------------------------------------------------------------------------------------------------- Commented for testing purposes, uncomment afterwards
+    @roles_required('admin')
     def post(self, auth_id):
         coach_role = Roles.query.filter_by(name='coach').first()
         
