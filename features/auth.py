@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from http.client import HTTPException
 
 from flask.views import MethodView
@@ -9,7 +10,7 @@ from middleware import roles_required
 from schemas.auth_schema import RegisterSchema, UserSetupSchema
 from flask import jsonify
 from models.coach_profiles import CoachProfiles # Ensure this path is correct
-from models import Users, ClientProfiles, CoachProfiles
+from models import Users, ClientProfiles, CoachProfiles, UserLoginActivity
 from .utils import create_notification
 
 auth_blp = Blueprint("Authentication", __name__, url_prefix="/auth", description="Operations for User Auth")
@@ -56,6 +57,7 @@ class UserSetup(MethodView):
     @auth_blp.arguments(UserSetupSchema())
     @jwt_required()
     def post(self, data):
+        
         current_auth_id=get_jwt_identity()
 
         #not client 
@@ -108,13 +110,45 @@ class UserSetup(MethodView):
 class UserLogin(MethodView):
     @auth_blp.arguments(RegisterSchema)
     def post(self,data):        
-        
-        user = UserAuths.query.filter_by(email=data.get("email")).first()
+        """
+        Authenticates user and logs login activity (active user tracking)
+        """
+        userAuth = UserAuths.query.filter_by(email=data.get("email")).first()
         
         # Check if user exists and password matches
-        if user and user.password == data.get("password"):
+        if userAuth and userAuth.password == data.get("password"):
             # Create JWT Token
-            token = create_access_token(identity=str(user.auth_id))
+            token = create_access_token(identity=str(userAuth.auth_id))
+            
+            user=Users.query.filter_by(auth_id=userAuth.auth_id).first()
+            
+            coach_profile = CoachProfiles.query.filter_by(
+                user_id=user.user_id,
+                status="approved"
+            ).first()
+
+            if coach_profile:
+                role_at_login = 2
+            else:
+                role_at_login = 1
+                
+            login_event = UserLoginActivity.query.filter_by(user_id=user.user_id).first()
+            now = datetime.now(timezone.utc)
+
+            if login_event:
+                # only update if it's a new day 
+                if login_event.last_active_at.date() != now.date():
+                    login_event.last_active_at = now
+            else:
+                login_event = UserLoginActivity(
+                    user_id=user.user_id,
+                    role_at_login=role_at_login,
+                    last_active_at=now
+                )
+                db.session.add(login_event)
+
+            db.session.commit()
+            
             return {"token": token}, 200
         
         abort(401, description="Invalid email or password")

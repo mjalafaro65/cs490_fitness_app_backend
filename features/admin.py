@@ -2,13 +2,13 @@ from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
 from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, AccountDeletionInfo, ClientProfiles, CoachReviews
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, AccountDeletionInfo, ClientProfiles, CoachReviews, UserLoginActivity
 from db import db
 from datetime import date, datetime, timedelta, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachDocumentSchema
-from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema, DisableAccountSchema
+from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSchema, AdminPurgeUserSchema, DisableAccountSchema, ActiveUsersQuerySchema
 from schemas.user_schema import UserInfoSchema, UserQuerySchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_documents import StatusEnum
@@ -93,6 +93,9 @@ class AdminReviewsView(MethodView):
     @roles_required("admin")
     @admin_blp.response(200, AdminCheckReviewsSchema(many=True))
     def get(self):
+        """
+        View coach reviews with optional filters
+        """
         review_id = request.args.get('review_id', type=int)
         coach_profile_id = request.args.get('coach_profile_id', type=int)
         client_user_id = request.args.get('client_user_id', type=int)
@@ -110,9 +113,14 @@ class AdminReviewsView(MethodView):
 @admin_blp.route("/manage-reviews/<int:review_id>")
 class AdminReviewActionView(MethodView):
     @roles_required("admin")
+    
     @admin_blp.arguments(AdminCheckReviewsSchema(partial=True)) 
     @admin_blp.response(200, AdminCheckReviewsSchema)
     def patch(self, update_data, review_id):
+        
+        """
+        Admin flags or hides a review
+        """
         review = CoachReviews.query.get_or_404(review_id)
 
         review.is_flagged = update_data.get('is_flagged', review.is_flagged)
@@ -169,6 +177,9 @@ class AdminUsersView(MethodView):
 class AdminUserStatsView(MethodView):
     @roles_required("admin")
     def get(self):
+        """
+        Returns overall user statistics (active, deleted, etc.)
+        """
 
         total_users = Users.query.count()
 
@@ -203,31 +214,59 @@ class AdminUserStatsView(MethodView):
             "client_users": client_users,         
         }
 
+@admin_blp.route("/users/active-report")
+class AdminActiveUsersReportView(MethodView):
 
-@admin_blp.route("/users/disable")
-class DisableAccountView(MethodView):
-    @roles_required("admin")
-    @admin_blp.arguments(DisableAccountSchema)
-    @admin_blp.response(200, description="User account disabled/enabled successfully.")
-    def patch(self, data):
-        user_id = data['user_id']
-        is_active = data['is_active']
+    # @roles_required("admin")
+    @admin_blp.arguments(ActiveUsersQuerySchema, location="query")
+    @admin_blp.response(200)
+    def get(self, args):
+        
+        """
+        Returns active users grouped by daily/weekly/monthly window
+        """
 
-        user = Users.query.filter_by(user_id=user_id).first()
-        if not user:
-            return {"msg": "User not found"}, 404
+        period = request.args.get("period", "daily")
+        now = datetime.utcnow()
 
-        user.is_active = bool(is_active)
-
-        if not user.is_active:
-            admin_auth_id = get_jwt_identity()
-            admin_user_id = db.session.query(Users.user_id).filter_by(auth_id=admin_auth_id).scalar()
-            admin_user_id = 1
-            user.disabled_by_admin_user_id = admin_user_id
-            user.disabled_at = datetime.now(timezone.utc)
+        # Time range
+        if period == "daily":
+            cutoff = now - timedelta(days=1)
+        elif period == "weekly":
+            cutoff = now - timedelta(days=7)
+        elif period == "monthly":
+            cutoff = now - timedelta(days=30)
         else:
-            user.disabled_by_admin_user_id = None
-            user.disabled_at = None
+            return {"msg": "Invalid period"}, 400
 
-        db.session.commit()
-        return {"message": f"User account {'disabled' if not user.is_active else 'enabled'} successfully."}
+        # total active users
+        total_active_users = db.session.execute(
+            select(func.count(func.distinct(UserLoginActivity.user_id)))
+            .where(UserLoginActivity.created_at >= cutoff)
+        ).scalar()
+
+        # client vs coach
+        breakdown = db.session.execute(
+            select(
+                UserLoginActivity.role_at_login,
+                func.count(func.distinct(UserLoginActivity.user_id))
+            )
+            .where(UserLoginActivity.created_at >= cutoff)
+            .group_by(UserLoginActivity.role_at_login)
+        ).all()
+
+        # format
+        result = {
+            "period": period,
+            "total_active_users": total_active_users,
+            "client_active_users": 0,
+            "coach_active_users": 0
+        }
+
+        for role, count in breakdown:
+            if role == 1:
+                result["client_active_users"] = count
+            elif role == 2:
+                result["coach_active_users"] = count
+
+        return result, 200
