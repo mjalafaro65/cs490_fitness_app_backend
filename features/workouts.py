@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from sqlalchemy.orm import selectinload
 from datetime import datetime
 from decimal import Decimal
 
@@ -7,6 +7,16 @@ from flask.views import MethodView
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_smorest import Blueprint, abort
 from sqlalchemy import and_, func, or_
+from flask import request
+
+from middleware import roles_required
+from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments, WorkoutLogEntries, WorkoutLogs
+from db import db
+from datetime import date, datetime, timezone
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func, select, desc
+from schemas.workout_schema import WorkoutLogSchema
+from models.coach_client_relationships import status_enum
 
 from db import db
 from models import (
@@ -16,12 +26,16 @@ from models import (
     WorkoutPlanDayExercises,
     WorkoutPlanDays,
     WorkoutPlans,
+    Roles,
+    CoachProfiles,
+    CoachClientRelationships
 )
 from models.calendar_workouts import CalendarWorkouts
 from models.workout_plan_assignments import (
     AssignmentStatusEnum,
     AssignmentTypeEnum,
     RepeatRuleEnum,
+    
 )
 from schemas.workout_schema import (
     CalendarOccurrenceSchema,
@@ -38,6 +52,11 @@ from schemas.workout_schema import (
     PlanDayCreateSchema,
     PlanDayUpdateSchema,
     PlanUpdateSchema,
+    WorkoutLogEntrySchema,
+    WorkoutLogSchema,
+    WorkoutLogQuerySchema,
+    CalendarWorkoutQuerySchema,
+    CalendarViewSchema
 )
 
 workout_blp = Blueprint(
@@ -961,61 +980,347 @@ class PlanCalendar(MethodView):
             abort(500, description=str(e))
         return {"calendar_workout_ids": created}
     
-from flask import request
-from flask.views import MethodView
-from flask_smorest import Blueprint,abort
-from middleware import roles_required
-from models import Users, UserRoles, CoachProfiles, CoachProgressPhotos, CoachDocuments
-from db import db
-from datetime import date, datetime, timezone
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func, select, desc
-from schemas.workout_schema import WorkoutLogSchema
+@workout_blp.route("/calendar-workouts")
+class CalendarWorkoutsList(MethodView):
 
-
-@workout_blp.route("/workout-logs")
-class WorkoutLogs(MethodView):
     @jwt_required()
-    @workout_blp.arguments(WorkoutLogSchema)
-    @workout_blp.response(200, WorkoutLogSchema)
-    def post(self, workout_log_data):
-        user_id = get_jwt_identity()
-        user = Users.query.filter_by(auth_id=user_id).first()
-        if not user:
-            abort(404, description="User record not found.")
+    def get(self):
+        """
+         get all scheduled workouts per user
+        """
+        user=_current_user()
+        workouts = CalendarWorkouts.query.filter_by(
+            for_user_id=user.user_id
+        ).order_by(CalendarWorkouts.scheduled_start.asc()).all()
+
+        return [
+            {
+                "calendar_workout_id": w.calendar_workout_id,
+                "plan_day_id": w.plan_day_id,
+                "scheduled_start": w.scheduled_start,
+                "scheduled_end": w.scheduled_end,
+                "status": w.status
+            }
+            for w in workouts
+        ]
+
+@workout_blp.route("/calendar-workouts/<int:calendar_workout_id>")
+class CalendarWorkoutDetail(MethodView):
+    def get(self, calendar_workout_id):
         
-        exercise_id = workout_log_data.get("exercise_id")
-        ### May allow for entry without exercise id.
-        if not exercise_id:
-            abort(400, description="exercise_id is required.")
+        """
+        detailed calendar workouts no exercise list 
+        """
+        w = CalendarWorkouts.query.get(calendar_workout_id)
+        if not w:
+            abort(404)
+
+        day = WorkoutPlanDays.query.filter_by(
+            plan_day_id=w.plan_day_id
+        ).first()
+
+        plan = None
+        if day:
+            plan = WorkoutPlans.query.filter_by(
+                plan_id=day.plan_id
+            ).first()
+
+        # get exercises (from plan day exercises table)
+        exercises = []
+        if day:
+            lines = WorkoutPlanDayExercises.query.filter_by(
+                day_id=day.plan_day_id
+            ).all()
+
+            exercises = [line.exercise_id for line in lines]
+
+        return {
+            "calendar_workout_id": w.calendar_workout_id,
+
+            
+            "plan_id": plan.plan_id if plan else None,
+            "name": plan.name if plan else None,
+
+            "plan_day_id": day.plan_day_id if day else None,
+               
+      
+            "start": w.scheduled_start,
+            "end": w.scheduled_end,
+
+            "exercises": exercises
+        }
+
+
+from datetime import datetime, timedelta
+
+
+@workout_blp.route("/calendar-workouts-view")
+class CalendarWorkoutsList(MethodView):
+    """
+        Works for self and coach,
+        if not date(ex- 2026-04-18) -or today,
+        view: date or week(optional),
+        Coach: gets all users workouts for day or week
         
+        /calendar-workouts-view?date={date}?view={date or week}
+        
+    """
 
-        return workout_log_data
+    @jwt_required(optional=True)
+    @workout_blp.arguments(CalendarWorkoutQuerySchema, location="query")
+    @workout_blp.response(200, CalendarViewSchema(many=True))
+    def get(self, query_data):
 
-class CompleteWorkout(MethodView):
-    @jwt_required()
-    @workout_blp.arguments(WorkoutLogSchema)
-    @workout_blp.response(200, description="Workout marked as complete.")
-    def post(self, workout_log_data):
-        user_id = get_jwt_identity()
-        user = Users.query.filter_by(auth_id=user_id).first()
-        if not user:
-            abort(404, description="User record not found.")
+        user = _current_user()
 
-        new_log = WorkoutLogs(
-            user_id=user.user_id,
-            exercise_id=workout_log_data.get("exercise_id"),
-            sets=workout_log_data.get("sets"),
-            reps=workout_log_data.get("reps"),
-            weight=workout_log_data.get("weight"),
-            rpe=workout_log_data.get("rpe"),
-            distance=workout_log_data.get("distance"),
-            calories=workout_log_data.get("calories"),
-            duration_minutes=workout_log_data.get("duration_minutes"),
-            notes=workout_log_data.get("notes")
+        view = query_data.get("view")
+        date = query_data.get("date")
+
+        # 1. BASE QUERY (ONLY ONCE)
+        query = CalendarWorkouts.query.options(
+            selectinload(CalendarWorkouts.plan_day)
+                .selectinload(WorkoutPlanDays.plan),
+
+            selectinload(CalendarWorkouts.plan_day)
+                .selectinload(WorkoutPlanDays.exercises)
+                .selectinload(WorkoutPlanDayExercises.exercise),
         )
 
-        db.session.add(new_log)
+        # 2. DETERMINE IF COACH
+        coach_profile = CoachProfiles.query.filter_by(
+            user_id=user.user_id
+        ).first()
+
+        is_coach = coach_profile is not None and coach_profile.status == "approved"
+
+        # 3. FILTER BY ROLE
+        if is_coach:
+            client_ids = db.session.query(
+                CoachClientRelationships.client_user_id
+            ).filter(
+                CoachClientRelationships.coach_profile_id == coach_profile.coach_profile_id,
+                CoachClientRelationships.status == status_enum.active
+            ).all()
+
+            client_ids = [c[0] for c in client_ids]
+
+            query = query.filter(
+                CalendarWorkouts.for_user_id.in_(client_ids)
+            )
+
+        else:
+            query = query.filter(
+                CalendarWorkouts.for_user_id == user.user_id
+            )
+
+        # 4. DATE / VIEW FILTER
+        start = None
+        end = None
+        
+        if not date and not view:
+            view = "today"
+
+        if date:
+            if isinstance(date, str):
+                date = datetime.strptime(date, "%Y-%m-%d").date()
+
+            start = datetime.combine(date, datetime.min.time())
+            end = start + timedelta(days=1)
+
+        elif view == "today":
+            today = datetime.utcnow().date()
+            start = datetime.combine(today, datetime.min.time())
+            end = start + timedelta(days=1)
+
+        elif view == "week":
+            today = datetime.utcnow().date()
+            start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
+            end = start + timedelta(days=7)
+
+        if start and end:
+            query = query.filter(
+                CalendarWorkouts.scheduled_start >= start,
+                CalendarWorkouts.scheduled_start < end
+            )
+        
+        
+
+        # 5. EXECUTE
+        workouts = query.order_by(
+            CalendarWorkouts.scheduled_start.asc()
+        ).all()
+
+        return workouts
+    
+@workout_blp.route("/workout-logs")
+class MyWorkoutLogs(MethodView):
+    @jwt_required(optional=True)
+    @workout_blp.arguments(WorkoutLogQuerySchema, location="query")
+    @workout_blp.response(200, WorkoutLogSchema(many=True))
+    def get(self, query_data):
+        """
+         Get all logs per day + their entries per exercise, takes optional user_id(client_id). filter by plan and date
+        """
+        # Get logged-in user
+        user =_current_user()
+        
+        # 2. Get role
+        client_role = Roles.query.filter_by(name="client").first()
+
+        coach_role = Roles.query.filter_by(name="coach").first()
+
+        is_client = UserRoles.query.filter_by(
+            user_id=user.user_id,
+            role_id=client_role.role_id
+        ).first() if client_role else False
+
+        is_coach = UserRoles.query.filter_by(
+            user_id=user.user_id,
+            role_id=coach_role.role_id
+        ).first() if coach_role else False
+
+        # optional client_id (coach only)
+        client_id = request.args.get("client_id", type=int)
+
+        # 4. Decide whose logs to fetch
+        if is_client:
+            # clients can only see themselves
+            target_user_id = user.user_id
+
+        elif is_coach:
+            # coaches can see a specific client
+            coach_profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+            is_coach = coach_profile and coach_profile.status == "approved"
+
+            if client_id:
+                target_user_id = client_id
+            else:
+                abort(400, "client_id is required for coaches")
+
+        else:
+            abort(403, "Invalid role")
+
+        # 5. Fetch logs
+        calendar_workout_id = query_data.get("calendar_workout_id")
+
+
+
+        query = (
+            db.session.query(WorkoutLogs)
+            .join(CalendarWorkouts,
+                  WorkoutLogs.calendar_workout_id == CalendarWorkouts.calendar_workout_id)
+            .filter(WorkoutLogs.user_id == target_user_id)
+        )
+
+        if calendar_workout_id:
+            query = query.filter(
+                WorkoutLogs.calendar_workout_id == calendar_workout_id
+            )
+
+       
+
+
+        logs = query.all()
+
+        return logs 
+
+
+    @jwt_required()
+    @workout_blp.arguments(WorkoutLogEntrySchema)
+    @workout_blp.response(201)
+    def post(self, data):
+        """
+        Post one exercise entry for day 
+        """
+        user=_current_user()
+        if not user:
+            abort(404)
+
+        # create or reuse log for this  session
+        log = WorkoutLogs.query.filter_by(
+            user_id=user.user_id,
+            calendar_workout_id=data["calendar_workout_id"]
+        ).first()
+
+        if not log:
+            log = WorkoutLogs(
+                user_id=user.user_id,
+                calendar_workout_id=data["calendar_workout_id"],
+                notes=data.get("notes")
+            )
+            db.session.add(log)
+            db.session.flush()
+
+        entry = WorkoutLogEntries(
+            workout_log_id=log.workout_log_id,
+            exercise_id=data["exercise_id"],
+            sets=data.get("sets"),
+            reps=data.get("reps"),
+            weight=data.get("weight"),
+            rpe=data.get("rpe"),
+            distance=data.get("distance"),
+            duration_minutes=data.get("duration_minutes"),
+            notes=data.get("notes")
+        )
+
+        db.session.add(entry)
         db.session.commit()
 
-        return {"message": "Workout logged and marked as complete."}
+        return {"message": "Logged"}
+    
+
+@workout_blp.route("/workout-log-entries/<int:entry_id>")
+class WorkoutLogEntryResource(MethodView):
+    @workout_blp.response(200, WorkoutLogEntrySchema)
+    def get(self, entry_id):
+        """
+        get entry
+        """
+        
+        entry = WorkoutLogEntries.query.get(entry_id)
+
+        if not entry:
+            abort(404, description="Workout log entry not found")
+
+        return entry
+
+    @workout_blp.arguments(WorkoutLogEntrySchema(partial=True))
+    @workout_blp.response(200)
+    def patch(self, data, entry_id):
+        """
+                edit entry
+                """
+                
+        entry = WorkoutLogEntries.query.get(entry_id)
+
+        if not entry:
+            abort(404, "Workout log entry not found")
+
+        # update only provided fields
+        for key, value in data.items():
+            setattr(entry, key, value)
+
+        db.session.commit()
+
+        return {
+            "message": "Workout log entry updated",
+            "workout_log_entry_id": entry.workout_log_entry_id
+        }
+    
+    @workout_blp.response(200)
+    def delete(self, entry_id):
+        entry = WorkoutLogEntries.query.get(entry_id)
+        """
+         delete entry
+        """
+        if not entry:
+            abort(404, "Workout log entry not found")
+
+        db.session.delete(entry)
+        db.session.commit()
+
+        return {
+            "message": "Workout log entry deleted",
+            "workout_log_entry_id": entry_id
+        }
+    

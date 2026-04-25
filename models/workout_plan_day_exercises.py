@@ -14,3 +14,5 @@ class WorkoutPlanDayExercises(db.Model):
     duration_minutes = db.Column(db.Integer)
     notes = db.Column(db.Text)
     sort_order = db.Column(db.Integer, nullable=False)
+
+    exercise = db.relationship("Exercises")
