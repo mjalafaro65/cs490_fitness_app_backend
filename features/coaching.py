@@ -556,6 +556,7 @@ class CoachBrowseFilter(MethodView):
             CoachProfiles.coach_profile_id,
             Users.first_name,
             Users.last_name,
+            Users.user_id, 
             Specialties.name.label("specialty_name"),
             CoachProfiles.years_experience,
             CoachProfiles.bio,
