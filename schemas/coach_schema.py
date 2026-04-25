@@ -87,6 +87,54 @@ class CoachBrowsingQuery(Schema):
     specialty_id = fields.Int(required=False)
     min_price = fields.Float(required=False)
     max_price = fields.Float(required=False)
+
+
+# Dashboard Schemas
+class ClientBasicInfoSchema(Schema):
+    user_id = fields.Int(dump_only=True)
+    first_name = fields.Str(dump_only=True)
+    last_name = fields.Str(dump_only=True)
+    relationship_start_date = fields.DateTime(dump_only=True)
+    relationship_status = fields.Str(dump_only=True)
+
+
+class ProgressSummarySchema(Schema):
+    avg_energy_level = fields.Float(dump_only=True)
+    avg_mood_score = fields.Float(dump_only=True)
+    avg_sleep_hours = fields.Float(dump_only=True)
+    workout_completion_rate = fields.Float(dump_only=True)
+    nutrition_logging_rate = fields.Float(dump_only=True)
+    active_goals_count = fields.Int(dump_only=True)
+    completed_goals_count = fields.Int(dump_only=True)
+    total_workouts_completed = fields.Int(dump_only=True)
+    days_tracked = fields.Int(dump_only=True)
+
+
+class RecentActivitySchema(Schema):
+    date = fields.Date(dump_only=True)
+    activity_type = fields.Str(dump_only=True)  # 'workout', 'meal', 'survey', 'goal'
+    description = fields.Str(dump_only=True)
+    details = fields.Dict(dump_only=True)
+
+
+class GoalStatusSchema(Schema):
+    goal_id = fields.Int(dump_only=True)
+    description = fields.Str(dump_only=True)
+    status = fields.Str(dump_only=True)
+    progress_percentage = fields.Float(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+    target_date = fields.DateTime(dump_only=True, allow_none=True)
+
+
+class ClientDashboardSchema(Schema):
+    client_info = fields.Nested(ClientBasicInfoSchema)
+    progress_summary = fields.Nested(ProgressSummarySchema)
+    recent_activity = fields.List(fields.Nested(RecentActivitySchema))
+    goals_status = fields.List(fields.Nested(GoalStatusSchema))
+
+
+class ClientListSchema(Schema):
+    clients = fields.List(fields.Nested(ClientDashboardSchema))
     day_of_week = fields.Int(required=False)
 
 
