@@ -11,6 +11,8 @@ from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, 
 
 nutrition_bp = Blueprint('Nutrition', __name__, url_prefix="/nutrition", description='Nutrition features')
 
+
+###maybe this should be get 
 @nutrition_bp.route('/nutrition-logs')
 class NutritionLogs(MethodView):
     @jwt_required()
@@ -77,6 +79,7 @@ class CreateMealLog(MethodView):
             user_id=user.user_id,
             meal_id=data['meal_id'],
             servings=data['servings'],
+            calories=data['calories'],  
             notes=data.get('notes'),
             logged_at=datetime.utcnow()
         )

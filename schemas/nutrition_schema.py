@@ -23,6 +23,7 @@ class CreateMealLogSchema(Schema):
     meal_log_id = fields.Int(dump_only=True)
     user_id = fields.Int(dump_only=True)
     meal_id = fields.Int(required=True)
+    calories=fields.Int(required=False)
     logged_at = fields.DateTime(dump_only=True)
     servings = fields.Decimal(as_string=True, required=True, validate=validate.Range(min=0.01))
     notes = fields.Str()
