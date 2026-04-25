@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from sqlalchemy.orm import joinedload
 from datetime import datetime
 from decimal import Decimal
 
@@ -52,7 +52,9 @@ from schemas.workout_schema import (
     PlanUpdateSchema,
     WorkoutLogEntrySchema,
     WorkoutLogSchema,
-    WorkoutLogQuerySchema
+    WorkoutLogQuerySchema,
+    CalendarWorkoutQuerySchema,
+    CalendarWorkoutSchema
 )
 
 workout_blp = Blueprint(
@@ -981,6 +983,9 @@ class CalendarWorkoutsList(MethodView):
 
     @jwt_required()
     def get(self):
+        """
+         get all scheduled workouts per user
+        """
         user=_current_user()
         workouts = CalendarWorkouts.query.filter_by(
             for_user_id=user.user_id
@@ -1000,7 +1005,10 @@ class CalendarWorkoutsList(MethodView):
 @workout_blp.route("/calendar-workouts/<int:calendar_workout_id>")
 class CalendarWorkoutDetail(MethodView):
     def get(self, calendar_workout_id):
-
+        
+        """
+        detailed calendar workouts no exercise list 
+        """
         w = CalendarWorkouts.query.get(calendar_workout_id)
         if not w:
             abort(404)
@@ -1022,7 +1030,7 @@ class CalendarWorkoutDetail(MethodView):
                 day_id=day.plan_day_id
             ).all()
 
-        exercises = [line.exercise_id for line in lines]
+            exercises = [line.exercise_id for line in lines]
 
         return {
             "calendar_workout_id": w.calendar_workout_id,
@@ -1040,6 +1048,79 @@ class CalendarWorkoutDetail(MethodView):
             "exercises": exercises
         }
 
+
+from datetime import datetime, timedelta
+
+@workout_blp.route("/calendar-workouts")
+class CalendarWorkoutsList(MethodView):
+
+    @jwt_required()
+    @workout_blp.arguments(CalendarWorkoutQuerySchema, location="query")
+    @workout_blp.response(200, CalendarWorkoutSchema(many=True))
+
+    def get(self, query_data):
+        """
+         calendar workouts per day
+        """
+        user = _current_user()
+        view = query_data.get("view")
+        date = query_data.get("date")
+
+
+        query = (
+            CalendarWorkouts.query
+            .options(
+                db.joinedload(CalendarWorkouts.plan_day)
+                .joinedload(WorkoutPlanDays.plan),
+
+                db.joinedload(CalendarWorkouts.plan_day)
+                .joinedload(WorkoutPlanDays.exercises)
+                .joinedload(WorkoutPlanDayExercises.exercise)
+            )
+            .filter(CalendarWorkouts.for_user_id == user.user_id)
+        )
+
+        if view == "today":
+                start = datetime.utcnow().date()
+                start = datetime.combine(start, datetime.min.time())
+                end = start + timedelta(days=1)
+
+                query = query.filter(
+                    CalendarWorkouts.scheduled_start >= start,
+                    CalendarWorkouts.scheduled_start < end
+                )
+        elif view == "week":
+                today = datetime.utcnow().date()
+                start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
+                end = start + timedelta(days=7)
+
+                query = query.filter(
+                    CalendarWorkouts.scheduled_start >= start,
+                    CalendarWorkouts.scheduled_start < end
+                )
+
+        elif date:
+            start = datetime.combine(date, datetime.min.time())
+            end = start + timedelta(days=1)
+
+            query = query.filter(
+                CalendarWorkouts.scheduled_start >= start,
+                CalendarWorkouts.scheduled_start < end
+            )
+
+
+        workouts = query.order_by(CalendarWorkouts.scheduled_start.asc()).all()
+
+        return [
+            {
+                "calendar_workout_id": w.calendar_workout_id,
+                "plan_day_id": w.plan_day_id,
+                "scheduled_start": w.scheduled_start,
+                "scheduled_end": w.scheduled_end,
+                "status": w.status
+            }
+            for w in workouts
+        ]
 @workout_blp.route("/workout-logs")
 class MyWorkoutLogs(MethodView):
     @jwt_required(optional=True)
@@ -1161,6 +1242,10 @@ class MyWorkoutLogs(MethodView):
 class WorkoutLogEntryResource(MethodView):
     @workout_blp.response(200, WorkoutLogEntrySchema)
     def get(self, entry_id):
+        """
+        get entry
+        """
+        
         entry = WorkoutLogEntries.query.get(entry_id)
 
         if not entry:
@@ -1171,7 +1256,10 @@ class WorkoutLogEntryResource(MethodView):
     @workout_blp.arguments(WorkoutLogEntrySchema(partial=True))
     @workout_blp.response(200)
     def patch(self, data, entry_id):
-
+        """
+                edit entry
+                """
+                
         entry = WorkoutLogEntries.query.get(entry_id)
 
         if not entry:
@@ -1191,7 +1279,9 @@ class WorkoutLogEntryResource(MethodView):
     @workout_blp.response(200)
     def delete(self, entry_id):
         entry = WorkoutLogEntries.query.get(entry_id)
-
+        """
+         delete entry
+        """
         if not entry:
             abort(404, "Workout log entry not found")
 

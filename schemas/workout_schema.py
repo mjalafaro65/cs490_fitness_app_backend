@@ -158,3 +158,35 @@ class WorkoutLogSchema(Schema):
 class WorkoutLogQuerySchema(Schema):
     client_id = fields.Int(allow_none=True)
     calendar_workout_id = fields.Int(required=False)
+
+
+
+class CalendarWorkoutQuerySchema(Schema):
+    date = fields.Date(required=False)
+    view = fields.Str(required=False) 
+
+class ExerciseSchema(Schema):
+    class Meta:
+        fields = "__all__"
+
+
+class PlanDayExerciseSchema(Schema):
+    exercise = fields.Nested(ExerciseSchema)
+
+    class Meta:
+        fields = "__all__"
+
+
+class PlanDaySchema(Schema):
+    exercises = fields.List(fields.Nested(PlanDayExerciseSchema))
+    plan = fields.Nested(lambda: PlanSchema())
+
+    class Meta:
+        fields = "__all__"
+
+
+class CalendarViewSchema(Schema):
+    plan_day = fields.Nested(PlanDaySchema)
+
+    class Meta:
+        fields = "__all__"

@@ -18,3 +18,5 @@ class Exercises(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=True)
     # Published custom exercises appear alongside defaults in the shared catalog
     is_public = db.Column(db.Boolean, default=False, nullable=False)
+
+  

@@ -13,3 +13,8 @@ class WorkoutPlanDays(db.Model):
     weekday = db.Column(db.Integer, nullable=True)
     # Preferred time of day for this session within the week
     session_time = db.Column(db.Time, nullable=True)
+    
+    exercises = db.relationship(
+        "WorkoutPlanDayExercises",
+        backref="plan_day"
+    )
