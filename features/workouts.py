@@ -95,6 +95,7 @@ def _serialize_exercise(ex: Exercises) -> dict:
         "equipment": ex.equipment,
         "training_type": ex.training_type,
         "description": ex.description,
+        "keywords": ex.keywords,
         "is_active": ex.is_active,
         "created_at": ex.created_at.isoformat() if ex.created_at else None,
         "created_by_user_id": ex.created_by_user_id,
@@ -222,7 +223,7 @@ class ExerciseCollection(MethodView):
     @workout_blp.arguments(ExerciseListQuerySchema, location="query")
     @workout_blp.response(200)
     def get(self, args):
-        """List exercises you can add to a plan: defaults, published customs, and your own."""
+        """List exercises you can add to a plan: defaults, published customs, and your own. Enhanced search with keywords and sorting."""
         user=  _current_user()
 
         q = Exercises.query.filter(Exercises.is_active.is_(True))
@@ -232,16 +233,45 @@ class ExerciseCollection(MethodView):
             Exercises.created_by_user_id == user.user_id,
         )
         q = q.filter(visibility)
+        
+        # Enhanced filtering
         if args.get("muscle_group"):
             q = q.filter(Exercises.muscle_group == args["muscle_group"])
         if args.get("equipment"):
             q = q.filter(Exercises.equipment == args["equipment"])
         if args.get("training_type"):
             q = q.filter(Exercises.training_type == args["training_type"])
+        
+        # Enhanced search across name, description, and keywords
         if args.get("q"):
-            like = f"%{args['q']}%"
-            q = q.filter(Exercises.name.like(like))
-        rows = q.order_by(Exercises.name).all()
+            search_term = f"%{args['q']}%"
+            q = q.filter(
+                or_(
+                    Exercises.name.like(search_term),
+                    Exercises.description.like(search_term),
+                    Exercises.keywords.like(search_term)
+                )
+            )
+        
+        # Keywords filtering
+        if args.get("keywords"):
+            keyword_term = f"%{args['keywords']}%"
+            q = q.filter(Exercises.keywords.like(keyword_term))
+        
+        # Enhanced sorting
+        sort_by = args.get("sort_by", "name")
+        if sort_by == "name":
+            q = q.order_by(Exercises.name)
+        elif sort_by == "created_at":
+            q = q.order_by(Exercises.created_at.desc())
+        elif sort_by == "muscle_group":
+            q = q.order_by(Exercises.muscle_group, Exercises.name)
+        elif sort_by == "equipment":
+            q = q.order_by(Exercises.equipment, Exercises.name)
+        else:
+            q = q.order_by(Exercises.name)  # default
+        
+        rows = q.all()
         return {"exercises": [_serialize_exercise(e) for e in rows]}
 
     @jwt_required()
@@ -257,6 +287,7 @@ class ExerciseCollection(MethodView):
             equipment=data["equipment"],
             training_type=data["training_type"],
             description=data.get("description"),
+            keywords=data.get("keywords"),  # Add keywords support
             is_active=True,
             created_by_user_id=user.user_id,
             is_public=bool(data.get("is_public", False)),
@@ -321,15 +352,29 @@ class ExerciseItem(MethodView):
     @jwt_required()
     @workout_blp.response(200)
     def delete(self, exercise_id):
-        """Deactivate your custom exercise (cannot delete catalog defaults)."""
-        user_id = get_jwt_identity()
+        """Deactivate your custom exercise (cannot delete catalog defaults). Admins can delete any exercise."""
+        user = _current_user()
         ex = Exercises.query.get(exercise_id)
         if not ex:
             abort(404, description="Exercise not found.")
         if ex.created_by_user_id is None:
             abort(403, description="Catalog exercises cannot be deleted.")
-        if ex.created_by_user_id != user_id:
-            abort(403, description="Not allowed.")
+        
+        # Allow deletion by creator or admin
+        from models import UserRoles, Roles
+        admin_role = Roles.query.filter_by(name='admin').first()
+        is_admin = UserRoles.query.filter_by(
+            user_id=user.auth_id, role_id=admin_role.role_id
+        ).first() if admin_role else False
+        
+        can_delete = (
+            ex.created_by_user_id == user.user_id or
+            is_admin
+        )
+        
+        if not can_delete:
+            abort(403, description="Not allowed to delete this exercise.")
+            
         ex.is_active = False
         try:
             db.session.commit()

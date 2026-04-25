@@ -7,6 +7,7 @@ class ExerciseCreateSchema(Schema):
     equipment = fields.Str(required=True, validate=validate.Length(max=60))
     training_type = fields.Str(required=True, validate=validate.Length(max=60))
     description = fields.Str(required=False, allow_none=True)
+    keywords = fields.Str(required=False, allow_none=True)  # Add keywords field
     is_public = fields.Bool(load_default=False)
 
 
@@ -16,6 +17,7 @@ class ExerciseUpdateSchema(Schema):
     equipment = fields.Str(required=False, validate=validate.Length(max=60))
     training_type = fields.Str(required=False, validate=validate.Length(max=60))
     description = fields.Str(required=False, allow_none=True)
+    keywords = fields.Str(required=False, allow_none=True)  # Add keywords field
     is_public = fields.Bool(required=False)
 
 
@@ -24,6 +26,8 @@ class ExerciseListQuerySchema(Schema):
     muscle_group = fields.Str(required=False)
     equipment = fields.Str(required=False)
     training_type = fields.Str(required=False)
+    keywords = fields.Str(required=False)  # Add keywords filtering
+    sort_by = fields.Str(required=False, validate=validate.OneOf(["name", "created_at", "muscle_group", "equipment"]))  # Add sorting options
 
 
 class PlanCreateSchema(Schema):
