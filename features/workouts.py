@@ -56,7 +56,8 @@ from schemas.workout_schema import (
     WorkoutLogSchema,
     WorkoutLogQuerySchema,
     CalendarWorkoutQuerySchema,
-    CalendarViewSchema
+    CalendarViewSchema,
+    CalendarWorkoutQuerySchemaWeek
 )
 
 workout_blp = Blueprint(
@@ -980,36 +981,70 @@ class PlanCalendar(MethodView):
             abort(500, description=str(e))
         return {"calendar_workout_ids": created}
     
+from datetime import datetime, timedelta
+
+
 @workout_blp.route("/calendar-workouts")
 class CalendarWorkoutsList(MethodView):
 
     @jwt_required()
-    def get(self):
+    @workout_blp.arguments(CalendarWorkoutQuerySchema, location="query")
+    def get(self, args):
         """
-         get all scheduled workouts per user
+        gets all scheduled calendar workouts,
+        with view it gets one 
         """
-        user=_current_user()
-        workouts = CalendarWorkouts.query.filter_by(
-            for_user_id=user.user_id
-        ).order_by(CalendarWorkouts.scheduled_start.asc()).all()
+        
+
+        user = _current_user()
+
+        view = args.get("view")
+
+        query = (
+            CalendarWorkouts.query
+            .options(
+                db.joinedload(CalendarWorkouts.plan_day)
+                .joinedload(WorkoutPlanDays.plan)
+            )
+            .filter(CalendarWorkouts.for_user_id == user.user_id)
+        )
+
+
+        if view == "week":
+            today = datetime.utcnow().date()
+
+            start_of_week = today - timedelta(days=today.weekday())
+            start = datetime.combine(start_of_week, datetime.min.time())
+
+            end = datetime.combine(start_of_week + timedelta(days=7), datetime.min.time())
+
+            query = query.filter(
+                CalendarWorkouts.scheduled_start >= start,
+                CalendarWorkouts.scheduled_start < end
+            )
+
+        workouts = query.order_by(
+            CalendarWorkouts.scheduled_start.asc()
+        ).all()
 
         return [
             {
                 "calendar_workout_id": w.calendar_workout_id,
                 "plan_day_id": w.plan_day_id,
+                "plan_day_name": w.plan_day.name if w.plan_day else None,
+                "plan_name": w.plan_day.plan.name if w.plan_day and w.plan_day.plan else None,
                 "scheduled_start": w.scheduled_start,
                 "scheduled_end": w.scheduled_end,
                 "status": w.status
             }
             for w in workouts
         ]
-
 @workout_blp.route("/calendar-workouts/<int:calendar_workout_id>")
 class CalendarWorkoutDetail(MethodView):
     def get(self, calendar_workout_id):
         
         """
-        detailed calendar workouts no exercise list 
+        detailed calendar workouts not exercise list 
         """
         w = CalendarWorkouts.query.get(calendar_workout_id)
         if not w:

@@ -204,3 +204,6 @@ class CalendarViewSchema(SQLAlchemyAutoSchema):
         load_instance = True
 
     plan_day = fields.Nested(PlanDaySchema)
+    
+class CalendarWorkoutQuerySchemaWeek(Schema):
+    view = fields.String(required=False)
