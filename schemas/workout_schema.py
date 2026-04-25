@@ -173,33 +173,34 @@ class ExerciseSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Exercises
         load_instance = True
-
-class PlanDayExerciseSchema(Schema):
-    exercise = fields.Nested(ExerciseSchema)
-
+        
+class PlanDayExerciseSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = WorkoutPlanDayExercises
         load_instance = True
 
+    exercise = fields.Nested(ExerciseSchema)
 
 
-class PlanDaySchema(Schema):
-    exercises = fields.List(fields.Nested(PlanDayExerciseSchema))
-    plan = fields.Nested(lambda: PlanSchema())
 
-    class Meta:
-        model = WorkoutPlanDays
-        load_instance = True
+
 
 class PlanSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = WorkoutPlans
         load_instance = True
 
+class PlanDaySchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlanDays
+        load_instance = True
 
-class CalendarViewSchema(Schema):
-    plan_day = fields.Nested(PlanDaySchema)
+    exercises = fields.Nested(PlanDayExerciseSchema, many=True)
+    plan = fields.Nested(PlanSchema)
 
+class CalendarViewSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = CalendarWorkouts
         load_instance = True
+
+    plan_day = fields.Nested(PlanDaySchema)

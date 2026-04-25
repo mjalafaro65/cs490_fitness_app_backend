@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from datetime import datetime
 from decimal import Decimal
 
@@ -16,7 +16,7 @@ from datetime import date, datetime, timezone
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from schemas.workout_schema import WorkoutLogSchema
-
+from models.coach_client_relationships import status_enum
 
 from db import db
 from models import (
@@ -27,13 +27,15 @@ from models import (
     WorkoutPlanDays,
     WorkoutPlans,
     Roles,
-    CoachProfiles
+    CoachProfiles,
+    CoachClientRelationships
 )
 from models.calendar_workouts import CalendarWorkouts
 from models.workout_plan_assignments import (
     AssignmentStatusEnum,
     AssignmentTypeEnum,
     RepeatRuleEnum,
+    
 )
 from schemas.workout_schema import (
     CalendarOccurrenceSchema,
@@ -1051,67 +1053,105 @@ class CalendarWorkoutDetail(MethodView):
 
 from datetime import datetime, timedelta
 
-@workout_blp.route("/calendar-workouts")
-class CalendarWorkoutsList(MethodView):
 
-    # @jwt_required()
+@workout_blp.route("/calendar-workouts-view")
+class CalendarWorkoutsList(MethodView):
+    """
+        Works for self and coach,
+        if not date(ex- 2026-04-18) -or today,
+        view: date or week(optional),
+        Coach: gets all users workouts for day or week
+        
+        /calendar-workouts-view?date={date}?view={date or week}
+        
+    """
+
+    @jwt_required(optional=True)
     @workout_blp.arguments(CalendarWorkoutQuerySchema, location="query")
     @workout_blp.response(200, CalendarViewSchema(many=True))
-
     def get(self, query_data):
-        """
-         calendar workouts per day
-        """
-        # user = _current_user()
+
+        user = _current_user()
+
         view = query_data.get("view")
         date = query_data.get("date")
 
+        # 1. BASE QUERY (ONLY ONCE)
+        query = CalendarWorkouts.query.options(
+            selectinload(CalendarWorkouts.plan_day)
+                .selectinload(WorkoutPlanDays.plan),
 
-        query = (
-            CalendarWorkouts.query
-            .options(
-                db.joinedload(CalendarWorkouts.plan_day)
-                .joinedload(WorkoutPlanDays.plan),
-
-                db.joinedload(CalendarWorkouts.plan_day)
-                .joinedload(WorkoutPlanDays.exercises)
-                .joinedload(WorkoutPlanDayExercises.exercise)
-            )
-            .filter(CalendarWorkouts.for_user_id == 16)
+            selectinload(CalendarWorkouts.plan_day)
+                .selectinload(WorkoutPlanDays.exercises)
+                .selectinload(WorkoutPlanDayExercises.exercise),
         )
 
-        if view == "today":
-                start = datetime.utcnow().date()
-                start = datetime.combine(start, datetime.min.time())
-                end = start + timedelta(days=1)
+        # 2. DETERMINE IF COACH
+        coach_profile = CoachProfiles.query.filter_by(
+            user_id=user.user_id
+        ).first()
 
-                query = query.filter(
-                    CalendarWorkouts.scheduled_start >= start,
-                    CalendarWorkouts.scheduled_start < end
-                )
-        elif view == "week":
-                today = datetime.utcnow().date()
-                start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
-                end = start + timedelta(days=7)
+        is_coach = coach_profile is not None and coach_profile.status == "approved"
 
-                query = query.filter(
-                    CalendarWorkouts.scheduled_start >= start,
-                    CalendarWorkouts.scheduled_start < end
-                )
+        # 3. FILTER BY ROLE
+        if is_coach:
+            client_ids = db.session.query(
+                CoachClientRelationships.client_user_id
+            ).filter(
+                CoachClientRelationships.coach_profile_id == coach_profile.coach_profile_id,
+                CoachClientRelationships.status == status_enum.active
+            ).all()
 
-        elif date:
+            client_ids = [c[0] for c in client_ids]
+
+            query = query.filter(
+                CalendarWorkouts.for_user_id.in_(client_ids)
+            )
+
+        else:
+            query = query.filter(
+                CalendarWorkouts.for_user_id == user.user_id
+            )
+
+        # 4. DATE / VIEW FILTER
+        start = None
+        end = None
+        
+        if not date and not view:
+            view = "today"
+
+        if date:
+            if isinstance(date, str):
+                date = datetime.strptime(date, "%Y-%m-%d").date()
+
             start = datetime.combine(date, datetime.min.time())
             end = start + timedelta(days=1)
 
+        elif view == "today":
+            today = datetime.utcnow().date()
+            start = datetime.combine(today, datetime.min.time())
+            end = start + timedelta(days=1)
+
+        elif view == "week":
+            today = datetime.utcnow().date()
+            start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
+            end = start + timedelta(days=7)
+
+        if start and end:
             query = query.filter(
                 CalendarWorkouts.scheduled_start >= start,
                 CalendarWorkouts.scheduled_start < end
             )
+        
+        
 
-
-        workouts = query.order_by(CalendarWorkouts.scheduled_start.asc()).all()
+        # 5. EXECUTE
+        workouts = query.order_by(
+            CalendarWorkouts.scheduled_start.asc()
+        ).all()
 
         return workouts
+    
 @workout_blp.route("/workout-logs")
 class MyWorkoutLogs(MethodView):
     @jwt_required(optional=True)

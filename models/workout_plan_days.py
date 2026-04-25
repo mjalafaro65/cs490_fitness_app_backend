@@ -18,3 +18,5 @@ class WorkoutPlanDays(db.Model):
         "WorkoutPlanDayExercises",
         backref="plan_day"
     )
+    
+    plan = db.relationship("WorkoutPlans", backref="days")
