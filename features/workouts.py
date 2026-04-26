@@ -992,7 +992,7 @@ class CalendarWorkoutsList(MethodView):
     def get(self, args):
         """
         gets all scheduled calendar workouts,
-        with view it gets one 
+        with view it gets week  
         """
         
 
@@ -1039,6 +1039,7 @@ class CalendarWorkoutsList(MethodView):
             }
             for w in workouts
         ]
+        
 @workout_blp.route("/calendar-workouts/<int:calendar_workout_id>")
 class CalendarWorkoutDetail(MethodView):
     def get(self, calendar_workout_id):

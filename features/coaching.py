@@ -3,7 +3,7 @@ from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-_from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
@@ -1485,6 +1485,9 @@ class ClientWorkoutAssignments(MethodView):
             'assignments': assignment_list,
             'total_active': active_count,
             'total_completed': completed_count
+        }
+            
+            
 # Dashboard Helper Functions
 def is_coach_employed_by_client(coach_user_id, client_user_id):
     """Check if coach has active employment relationship with client"""
