@@ -7,5 +7,6 @@ from .messaging_schema import (
     MarkMessageReadSchema,
     OnlineUserSchema,
     UserSchema,
-    SocketMessageSchema
+    SocketMessageSchema,
+    ProfileSchema,
 )

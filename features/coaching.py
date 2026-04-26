@@ -24,6 +24,7 @@ from models.coach_profiles import ApprovalStatusEnum
 from models.coach_client_relationships import status_enum
 from .utils import create_notification
 from datetime import datetime, timezone
+from .conversation_services import create_conversation
 from models.refund_disputes import StatusEnum_Disputes
 from models.payments import StatusEnum_Payments
 
@@ -512,7 +513,11 @@ class CoachBrowse(MethodView):
              CoachProfiles.profile_photo
         ).join(Users, CoachProfiles.user_id == Users.user_id) \
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id) \
-        .filter(CoachProfiles.status == ApprovalStatusEnum.approved) \
+        .filter( or_(
+        CoachProfiles.status == ApprovalStatusEnum.approved,
+        CoachProfiles.status == ApprovalStatusEnum.switched
+            )
+                ) \
         .all()
 
         return results
@@ -1026,6 +1031,19 @@ class CoachAcceptHireRequest(MethodView):
         )
         db.session.add(new_relationship)
         db.session.flush() 
+        
+        
+        
+        #create conversation
+        create_conversation(
+            participant_ids=[
+                hire_request.client_user_id,
+                coach_profile.user_id
+            ],
+            conversation_type="relationship",
+            relationship_id=new_relationship.relationship_id
+        )
+      
 
         plan = PaymentPlans.query.get(hire_request.payment_plan_id)
         default_pm = PaymentMethods.query.filter_by(
@@ -1036,6 +1054,8 @@ class CoachAcceptHireRequest(MethodView):
         
         now_utc = datetime.now(timezone.utc)
         
+      
+
         new_invoice = Invoices(
             relationship_id=new_relationship.relationship_id,
             payment_method_id=default_pm.payment_method_id if default_pm else None,
@@ -1136,6 +1156,9 @@ class CoachActiveRosterView(MethodView):
         coach_profile = db.session.execute(
             select(CoachProfiles).where(CoachProfiles.user_id == coach_user.user_id)
         ).scalar_one_or_none()
+        
+        if not coach_profile:
+            return []
 
         results = db.session.execute(
             select(

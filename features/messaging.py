@@ -6,7 +6,7 @@ from sqlalchemy import or_, and_
 from db import db
 from models import (
     Messages, Conversations, ConversationParticipants, 
-    Users, OnlineUsers,  CoachClientRelationships, CoachProfiles
+    Users, OnlineUsers,  CoachClientRelationships, CoachProfiles, ClientProfiles
 )
 from schemas.messaging_schema import (
     MessageSchema, ConversationSchema, CreateConversationSchema,
@@ -39,13 +39,23 @@ class ConversationList(MethodView):
         user = _current_user()
         
         # Get conversations where user is a participant
-        conversations = db.session.query(Conversations).join(
-            ConversationParticipants,
-            Conversations.conversation_id == ConversationParticipants.conversation_id
-        ).filter(
-            ConversationParticipants.user_id == user.user_id,
-            ConversationParticipants.is_active == True
-        ) .distinct().order_by(Conversations.updated_at.desc()).all()
+        # conversations = db.session.query(Conversations).join(
+        #     ConversationParticipants,
+        #     Conversations.conversation_id == ConversationParticipants.conversation_id
+        # ).filter(
+        #     ConversationParticipants.user_id == user.user_id,
+        #     ConversationParticipants.is_active == True
+        # ) .distinct().order_by(Conversations.updated_at.desc()).all()
+        conversations = (
+            db.session.query(Conversations)
+            .join(ConversationParticipants)
+            .filter(
+                ConversationParticipants.user_id == user.user_id,
+                ConversationParticipants.is_active.is_(True)
+            )
+            .order_by(Conversations.updated_at.desc())
+            .all()
+        )
         
         return conversations
 
@@ -155,9 +165,7 @@ class CreateConversation(MethodView):
         conversation_type = data["conversation_type"]
         relationship_id = data.get("relationship_id")
 
-        # -------------------------------------------------
-        # 1. DIRECT CHAT DEDUPLICATION
-        # -------------------------------------------------
+        # DIRECT CHAT DEDUPLICATION
         if conversation_type == "direct" and len(participant_ids) == 2:
 
             subquery = (
@@ -176,10 +184,21 @@ class CreateConversation(MethodView):
             if existing:
                 return existing, 200
 
-        # -------------------------------------------------
         # 2. RELATIONSHIP-BASED DEDUPLICATION
-        # -------------------------------------------------
         if relationship_id:
+            relationship = CoachClientRelationships.query.filter_by(
+                relationship_id=relationship_id
+            ).first()
+
+            if not relationship:
+                abort(403, "Invalid relationship")
+                
+            if user.user_id not in [
+                relationship.client_user_id,
+                relationship.coach_profile.user_id
+            ]:
+                abort(403, "Not part of this relationship")
+
             existing = Conversations.query.filter_by(
                 relationship_id=relationship_id
             ).first()
@@ -187,20 +206,17 @@ class CreateConversation(MethodView):
             if existing:
                 return existing, 200
 
-        # -------------------------------------------------
         # 3. CREATE CONVERSATION
-        # -------------------------------------------------
         new_conversation = Conversations(
             relationship_id=relationship_id,
             conversation_type=conversation_type
         )
 
         db.session.add(new_conversation)
-        db.session.flush()  # generates conversation_id
+        db.session.flush()
 
-        # -------------------------------------------------
-        # 4. ADD PARTICIPANTS (ONLY ONCE)
-        # -------------------------------------------------
+        # ADD PARTICIPANTS (ONLY ONCE)
+     
         db.session.add_all([
             ConversationParticipants(
                 conversation_id=new_conversation.conversation_id,
@@ -209,9 +225,7 @@ class CreateConversation(MethodView):
             for uid in participant_ids
         ])
 
-        # -------------------------------------------------
         # 5. COMMIT SAFELY
-        # -------------------------------------------------
         try:
             db.session.commit()
         except Exception:
@@ -454,6 +468,106 @@ class UserRelationships(MethodView):
                 },
 
                 "relationship_role": relationship_role
+            })
+
+
+        return result
+    
+
+@messaging_blp.route("/inbox")
+class InboxView(MethodView):
+
+    @jwt_required()
+    def get(self):
+        user = _current_user()
+
+        coach_profile = CoachProfiles.query.filter_by(
+            user_id=user.user_id,
+            status="approved"
+        ).first()
+
+        # get relationships
+        query = db.session.query(CoachClientRelationships).filter(
+            CoachClientRelationships.status == "active"
+        )
+
+        if coach_profile:
+            query = query.filter(
+                CoachClientRelationships.coach_profile_id == coach_profile.coach_profile_id
+                
+            )
+        else:
+            query = query.filter(
+                CoachClientRelationships.client_user_id == user.user_id
+            )
+
+        relationships = query.all()
+
+        result = []
+
+        for rel in relationships:
+
+            # 2. find other user
+            if coach_profile:
+                other_user_id = rel.client_user_id
+            else:
+                other_user_id = rel.coach_profile.user_id
+
+            other_user = Users.query.get(other_user_id)
+
+            # 3. get conversation
+            convo = Conversations.query.filter_by(
+                relationship_id=rel.relationship_id
+            ).first()
+
+            last_message = None
+            unread_count = 0
+
+            if convo:
+
+                msg = Messages.query.filter_by(
+                    conversation_id=convo.conversation_id
+                ).order_by(Messages.sent_at.desc()).first()
+
+                if msg:
+                    last_message = msg.body
+
+                unread_count = Messages.query.filter(
+                    Messages.conversation_id == convo.conversation_id,
+                    Messages.sender_user_id != user.user_id,
+                    Messages.is_read == False
+                ).count()
+
+            # 4. profile picture (THIS IS YOUR FIX)
+            profile_picture = None
+
+            if coach_profile:
+                client_profile = ClientProfiles.query.filter_by(
+                    client_id=other_user_id
+                ).first()
+                if client_profile:
+                    profile_picture = client_profile.profile_photo 
+            else:
+                coach_prof = CoachProfiles.query.filter_by(
+                    user_id=other_user_id
+                ).first()
+                if coach_prof:
+                    profile_picture = coach_prof.profile_photo 
+
+            # 5. response
+            result.append({
+                "relationship_id": rel.relationship_id,
+                "conversation_id": convo.conversation_id if convo else None,
+
+                "other_user": {
+                    "user_id": other_user.user_id,
+                    "first_name": other_user.first_name,
+                    "last_name": other_user.last_name,
+                    "profile_picture": profile_picture
+                },
+
+                "last_message": last_message,
+                "unread_count": unread_count
             })
 
         return result
