@@ -136,5 +136,9 @@ class Users(db.Model):
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
     
+    conversation_links = db.relationship(
+        "ConversationParticipants",
+        back_populates="user"
+    )
     
     

@@ -8,5 +8,18 @@ class Conversations(db.Model):
     conversation_id = db.Column(db.Integer, primary_key=True)
     relationship_id = db.Column(db.Integer, unique=True, nullable=False)
     conversation_type = db.Column(db.String(20), default='direct', nullable=False)  # direct, group
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+   
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    participants = db.relationship(
+            "Users",
+            secondary="conversation_participants",
+            viewonly=True
+    )
+    
+    participant_links = db.relationship(
+        "ConversationParticipants",
+        back_populates="conversation",
+        cascade="all, delete-orphan"
+    )
