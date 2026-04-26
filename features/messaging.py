@@ -45,7 +45,7 @@ class ConversationList(MethodView):
         ).filter(
             ConversationParticipants.user_id == user.user_id,
             ConversationParticipants.is_active == True
-        ).order_by(Conversations.updated_at.desc()).all()
+        ) .distinct().order_by(Conversations.updated_at.desc()).all()
         
         return conversations
 
@@ -160,16 +160,18 @@ class CreateConversation(MethodView):
         # -------------------------------------------------
         if conversation_type == "direct" and len(participant_ids) == 2:
 
-            existing = (
-                db.session.query(Conversations)
-                .join(ConversationParticipants)
-                .filter(Conversations.conversation_type == "direct")
-                .group_by(Conversations.conversation_id)
-                .having(
-                    db.func.count(ConversationParticipants.user_id) == 2
-                )
-                .first()
+            subquery = (
+                db.session.query(ConversationParticipants.conversation_id)
+                .filter(ConversationParticipants.user_id.in_(participant_ids))
+                .group_by(ConversationParticipants.conversation_id)
+                .having(db.func.count() == 2)
+                .subquery()
             )
+
+            existing = db.session.query(Conversations).filter(
+                Conversations.conversation_id.in_(subquery),
+                Conversations.conversation_type == "direct"
+            ).first()
 
             if existing:
                 return existing, 200

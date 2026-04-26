@@ -270,3 +270,32 @@ class AdminActiveUsersReportView(MethodView):
                 result["coach_active_users"] = count
 
         return result, 200
+    
+    
+@admin_blp.route("/users/disable")
+class DisableAccountView(MethodView):
+    @roles_required("admin")
+    @admin_blp.arguments(DisableAccountSchema)
+    @admin_blp.response(200, description="User account disabled/enabled successfully.")
+    def patch(self, data):
+        user_id = data['user_id']
+        is_active = data['is_active']
+
+        user = Users.query.filter_by(user_id=user_id).first()
+        if not user:
+            return {"msg": "User not found"}, 404
+
+        user.is_active = bool(is_active)
+
+        if not user.is_active:
+            admin_auth_id = get_jwt_identity()
+            admin_user_id = db.session.query(Users.user_id).filter_by(auth_id=admin_auth_id).scalar()
+            admin_user_id = 1
+            user.disabled_by_admin_user_id = admin_user_id
+            user.disabled_at = datetime.now(timezone.utc)
+        else:
+            user.disabled_by_admin_user_id = None
+            user.disabled_at = None
+
+        db.session.commit()
+        return {"message": f"User account {'disabled' if not user.is_active else 'enabled'} successfully."}
