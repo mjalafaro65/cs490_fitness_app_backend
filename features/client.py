@@ -7,18 +7,22 @@ from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestC
 from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
 from models.invoices import Invoices
+from models.refund_disputes import StatusEnum_Disputes
 
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
-from models import Users, Goals
+from models import Users, Goals, PaymentMethods, Payments
 from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
 from datetime import datetime, timezone
+from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema
 
+from models.invoices import StatusEnumList
+from models.payments import StatusEnum_Payments
 from models.coach_hire_requests import StatusEnum
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes
 from .utils import create_notification
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
@@ -787,7 +791,183 @@ class EditGoalView(MethodView):
         except Exception:
             db.session.rollback()
             abort(500, description="An error occurred while updating the goal.")
+
+
+
+@client_blp.route("/invoices")
+class ClientInvoiceList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        client_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        query = (
+            select(Invoices, Users.first_name, Users.last_name)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
+            .join(Users, CoachProfiles.user_id == Users.user_id)
+            .where(CoachClientRelationships.client_user_id == client_user.user_id)
+            .order_by(Invoices.created_at.desc())
+        )
+
+        results = db.session.execute(query).all()
+
+        return {
+            "invoices": [
+                {
+                    "invoice_id": inv.invoice_id,
+                    "coach_name": f"{fname} {lname}",
+                    "amount": float(inv.subtotal),
+                    "status": inv.status.value,
+                    "created_at": inv.created_at.isoformat(),
+                    "pay_date": inv.pay_date.isoformat() if inv.pay_date else None,
+                    "is_payable": inv.status in [StatusEnumList.issued, StatusEnumList.past_due]
+                } for inv, fname, lname in results
+            ]
+        }
+    
+
+@client_blp.route("/pay-invoice")
+class PayInvoice(MethodView):
+    @jwt_required()
+    @client_blp.arguments(PayInvoiceSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        client_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        invoice = db.session.execute(
+            select(Invoices)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .where(
+                Invoices.invoice_id == data["invoice_id"],
+                CoachClientRelationships.client_user_id == client_user.user_id
+            )
+        ).scalar_one_or_none()
+
+        if not invoice:
+            abort(404, description="Invoice not found or unauthorized")
+        if invoice.status == StatusEnumList.paid:
+            return {"message": "Invoice already paid"}, 400
+
+        input_last4 = data.get("last4")
+        if input_last4:
+            selected_card = PaymentMethods.query.filter_by(
+                user_id=client_user.user_id,
+                last4=input_last4,
+                is_active=True
+            ).first()
+        else:
+            selected_card = PaymentMethods.query.filter_by(
+                user_id=client_user.user_id,
+                is_default=True,
+                is_active=True
+            ).first()
+
+        if not selected_card:
+            abort(400, description="No valid active payment method found.")
+
+        now_utc = datetime.now(timezone.utc)
+        new_payment = Payments(
+            invoice_id=invoice.invoice_id,
+            payer_user_id=client_user.user_id,
+            amount=invoice.subtotal,
+            status="completed",
+            is_auto_pay=False,
+            provider=selected_card.provider, 
+            provider_ref=selected_card.token, 
+            created_at=now_utc,
+            processed_at=now_utc
+        )
+
+        invoice.status = StatusEnumList.paid
+        invoice.pay_date = now_utc
+        invoice.payment_method_id = selected_card.payment_method_id
+
+        db.session.add(new_payment)
+        
+        relationship = CoachClientRelationships.query.get(invoice.relationship_id)
+        coach_profile = CoachProfiles.query.get(relationship.coach_profile_id)
+        
+        create_notification(
+            user_id=coach_profile.user_id,
+            type_slug="payment-received",
+            title="Payment Received",
+            body=f"Client {client_user.first_name} paid invoice #{invoice.invoice_id} for ${invoice.subtotal}."
+        )
+
+        db.session.commit()
+
+        return {
+            "message": "Payment successful",
+            "provider": new_payment.provider,
+            "provider_ref": new_payment.provider_ref,
+            "amount": float(invoice.subtotal)
+        }, 200
+    
+
+@client_blp.route("/my-payments")
+class ClientPaymentList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        payments = Payments.query.filter_by(payer_user_id=client.user_id).order_by(Payments.created_at.desc()).all()
+
+        return {
+            "payments": [
+                {
+                    "payment_id": p.payment_id,
+                    "amount": float(p.amount),
+                    "status": p.status.value,
+                    "date": p.processed_at.isoformat() if p.processed_at else p.created_at.isoformat(),
+                    "can_dispute": (datetime.utcnow() - p.created_at).days <= 7 # Policy: 7 days
+                } for p in payments
+            ]
+        }
             
+
+@client_blp.route("/dispute-payment")
+class CreateDispute(MethodView):
+    @jwt_required()
+    @client_blp.arguments(CreateDisputeSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        payment = Payments.query.get_or_404(data["payment_id"])
+        
+        if payment.payer_user_id != client.user_id:
+            abort(403, description="Unauthorized: This is not your payment record.")
+        
+        now = datetime.now(timezone.utc)
+        pay_date = payment.created_at.replace(tzinfo=timezone.utc)
+        days_diff = (now - pay_date).days
+        
+        if days_diff > 7:
+            return {
+                "message": "Policy Error: Disputes must be filed within 7 days of payment.",
+                "days_since_payment": days_diff
+            }, 400
+
+        new_dispute = RefundDisputes(
+            payment_id=payment.payment_id,
+            opened_by_user_id=client.user_id,
+            reason=data["reason"],
+            status=StatusEnum_Disputes.open, 
+            created_at=now
+        )
+        
+        db.session.add(new_dispute)
+        
+        
+        db.session.commit()
+
+        return {
+            "message": "Dispute submitted successfully.",
+            "dispute_id": new_dispute.refund_dispute_id,
+            "status": new_dispute.status.value
+        }, 201
             
 # <<<<<<< Coach-favorite-feature
 # ### Coach Favorites Management
