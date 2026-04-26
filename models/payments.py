@@ -2,7 +2,7 @@ from datetime import datetime
 import enum
 from db import db
 
-class StatusEnum(enum.Enum):
+class StatusEnum_Payments(enum.Enum):
     pending = 'pending'
     completed = 'completed'
     failed = 'failed'
@@ -16,8 +16,8 @@ class Payments(db.Model):
     payer_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     amount = db.Column(db.Numeric(10,2), nullable=False)
-    status = db.Column(db.Enum(StatusEnum), nullable=False)
-    is_auto_payment = db.Column(db.Boolean, default=False)
+    status = db.Column(db.Enum(StatusEnum_Payments), nullable=False)
+    is_auto_pay = db.Column(db.Boolean, default=False)
     provider = db.Column(db.String(60), nullable=True)
     provider_ref = db.Column(db.String(120), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

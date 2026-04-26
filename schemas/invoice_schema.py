@@ -11,3 +11,8 @@ class UpdateInvoiceStatusSchema(Schema):
     invoice_id = fields.Int(required=True)
     # Use the imported StatusEnumList here
     new_status = fields.Enum(StatusEnumList, by_value=True, required=True)
+
+class PayInvoiceSchema(Schema):
+    invoice_id = fields.Int(required=True)
+    # Optional: if provided, we search for this specific card
+    last4 = fields.Str(required=False, allow_none=True, load_default=None)

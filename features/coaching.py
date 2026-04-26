@@ -3,7 +3,7 @@ from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, Payments
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
@@ -1006,7 +1006,6 @@ class CoachAcceptHireRequest(MethodView):
         if hire_request.status != StatusEnum.pending:
             abort(400, description="Request is no longer pending")
 
-
         hire_request.status = StatusEnum.accepted
         hire_request.decided_at = db.func.now()
 
@@ -1017,21 +1016,64 @@ class CoachAcceptHireRequest(MethodView):
             status="active", 
             started_at=db.func.now()
         )
-        
         db.session.add(new_relationship)
+        db.session.flush() 
+
+        plan = PaymentPlans.query.get(hire_request.payment_plan_id)
+        default_pm = PaymentMethods.query.filter_by(
+            user_id=hire_request.client_user_id,
+            is_default=True,
+            is_active=True
+        ).first()
         
+        now_utc = datetime.now(timezone.utc)
+        
+        new_invoice = Invoices(
+            relationship_id=new_relationship.relationship_id,
+            payment_method_id=default_pm.payment_method_id if default_pm else None,
+            status=StatusEnumList.issued,
+            currency="USD",
+            subtotal=plan.amount,
+            created_at=now_utc,
+            issued_at=now_utc
+        )
+        db.session.add(new_invoice)
+        db.session.flush()
+
+     
+        if default_pm:
+            new_payment = Payments(
+                invoice_id=new_invoice.invoice_id,
+                payer_user_id=hire_request.client_user_id,
+                amount=plan.amount,
+                status="succeeded",
+                is_auto_pay=1, 
+                provider=default_pm.provider,
+                provider_ref=default_pm.token,
+                created_at=now_utc,
+                processed_at=now_utc
+            )
+            new_invoice.status = StatusEnumList.paid
+            new_invoice.pay_date = now_utc
+            db.session.add(new_payment)
+            
+            notification_body = f"Coach {coach_user.first_name} accepted your request! Initial payment of ${plan.amount} processed automatically."
+        else:
+            notification_body = f"Coach {coach_user.first_name} accepted your request! Please check your billing to pay your first invoice."
+
         db.session.commit()
 
         create_notification(
-                user_id=hire_request.client_user_id,
-                type_slug="coach-request-accepted",
-                title="Accepted Coach Request",
-                body=f"Your coach hire request has been canceled"
-            )
+            user_id=hire_request.client_user_id,
+            type_slug="coach-request-accepted",
+            title="Request Accepted",
+            body=notification_body
+        )
 
         return {
-            "message": "Client accepted and relationship activated",
-            "relationship_id": new_relationship.relationship_id
+            "message": "Relationship activated and initial payment processed",
+            "relationship_id": new_relationship.relationship_id,
+            "invoice_id": new_invoice.invoice_id
         }
     
 

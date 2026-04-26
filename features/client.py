@@ -11,13 +11,15 @@ from models.invoices import Invoices
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
-from models import Users, Goals
+from models import Users, Goals, PaymentMethods, Payments
 from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
 from datetime import datetime, timezone
+from schemas.invoice_schema import PayInvoiceSchema
 
 from models.invoices import StatusEnumList
+from models.payments import StatusEnum_Payments
 from models.coach_hire_requests import StatusEnum
 from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions
 from .utils import create_notification
@@ -791,7 +793,7 @@ class EditGoalView(MethodView):
 
 
 
-@client_blp.route("/unpaid-invoices")
+@client_blp.route("/invoices")
 class ClientInvoiceList(MethodView):
     @jwt_required()
     def get(self):
@@ -822,7 +824,87 @@ class ClientInvoiceList(MethodView):
                 } for inv, fname, lname in results
             ]
         }
+    
+
+@client_blp.route("/pay-invoice")
+class PayInvoice(MethodView):
+    @jwt_required()
+    @client_blp.arguments(PayInvoiceSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        client_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        invoice = db.session.execute(
+            select(Invoices)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .where(
+                Invoices.invoice_id == data["invoice_id"],
+                CoachClientRelationships.client_user_id == client_user.user_id
+            )
+        ).scalar_one_or_none()
+
+        if not invoice:
+            abort(404, description="Invoice not found or unauthorized")
+        if invoice.status == StatusEnumList.paid:
+            return {"message": "Invoice already paid"}, 400
+
+        input_last4 = data.get("last4")
+        if input_last4:
+            selected_card = PaymentMethods.query.filter_by(
+                user_id=client_user.user_id,
+                last4=input_last4,
+                is_active=True
+            ).first()
+        else:
+            selected_card = PaymentMethods.query.filter_by(
+                user_id=client_user.user_id,
+                is_default=True,
+                is_active=True
+            ).first()
+
+        if not selected_card:
+            abort(400, description="No valid active payment method found.")
+
+        now_utc = datetime.now(timezone.utc)
+        new_payment = Payments(
+            invoice_id=invoice.invoice_id,
+            payer_user_id=client_user.user_id,
+            amount=invoice.subtotal,
+            status="completed",
+            is_auto_pay=False,
+            provider=selected_card.provider, 
+            provider_ref=selected_card.token, 
+            created_at=now_utc,
+            processed_at=now_utc
+        )
+
+        invoice.status = StatusEnumList.paid
+        invoice.pay_date = now_utc
+        invoice.payment_method_id = selected_card.payment_method_id
+
+        db.session.add(new_payment)
+        
+        relationship = CoachClientRelationships.query.get(invoice.relationship_id)
+        coach_profile = CoachProfiles.query.get(relationship.coach_profile_id)
+        
+        create_notification(
+            user_id=coach_profile.user_id,
+            type_slug="payment-received",
+            title="Payment Received",
+            body=f"Client {client_user.first_name} paid invoice #{invoice.invoice_id} for ${invoice.subtotal}."
+        )
+
+        db.session.commit()
+
+        return {
+            "message": "Payment successful",
+            "provider": new_payment.provider,
+            "provider_ref": new_payment.provider_ref,
+            "amount": float(invoice.subtotal)
+        }, 200
             
+
+
             
 # <<<<<<< Coach-favorite-feature
 # ### Coach Favorites Management
