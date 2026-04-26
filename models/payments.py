@@ -4,7 +4,7 @@ from db import db
 
 class StatusEnum_Payments(enum.Enum):
     pending = 'pending'
-    completed = 'completed'
+    succeeded = 'succeeded'
     failed = 'failed'
     refunded = 'refunded'
 

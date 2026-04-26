@@ -3,13 +3,13 @@ from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, Payments
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
 from schemas.client_schema import ReviewCoachSchema
-from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
+from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
 
 from models.coach_hire_requests import StatusEnum
 from models.invoices import StatusEnumList
@@ -18,6 +18,8 @@ from models.coach_profiles import ApprovalStatusEnum
 from models.coach_client_relationships import status_enum
 from .utils import create_notification
 from datetime import datetime, timezone
+from models.refund_disputes import StatusEnum_Disputes
+from models.payments import StatusEnum_Payments
 
 
 
@@ -1382,3 +1384,75 @@ class FavoriteCoach(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description="Failed to favorite coach.")
+
+
+
+@coach_blp.route("/disputes")
+class CoachDisputeList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        results = db.session.execute(
+            select(RefundDisputes, Payments.amount, Users.first_name, Users.last_name)
+            .join(Payments, RefundDisputes.payment_id == Payments.payment_id)
+            .join(Invoices, Payments.invoice_id == Invoices.invoice_id)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
+            .join(Users, RefundDisputes.opened_by_user_id == Users.user_id) # Client Info
+            .where(CoachProfiles.user_id == coach_user.user_id)
+            .order_by(RefundDisputes.created_at.desc())
+        ).all()
+
+        return {
+            "disputes": [
+                {
+                    "dispute_id": d.refund_dispute_id,
+                    "payment_id": d.payment_id,
+                    "client_name": f"{fname} {lname}",
+                    "amount": float(amt),
+                    "reason": d.reason,
+                    "status": d.status.value, 
+                    "created_at": d.created_at.isoformat()
+                } for d, amt, fname, lname in results
+            ]
+        }
+    
+
+
+
+
+@coach_blp.route("/resolve-dispute")
+class ResolveDispute(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(ResolveDisputeSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        coach = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        dispute = RefundDisputes.query.get_or_404(data["dispute_id"])
+        
+        dispute.status = data["status"] 
+        dispute.resolution_notes = data["notes"]
+        dispute.resolved_at = datetime.now(timezone.utc)
+        dispute.resolved_by_id = coach.user_id
+
+        # if Refund is Approved
+        if data["status"] == StatusEnum_Disputes.approved:
+            payment = Payments.query.get(dispute.payment_id)
+            if payment:
+                payment.status = StatusEnum_Payments.refunded
+
+        db.session.commit()
+
+        status_str = data["status"].value 
+        
+        create_notification(
+            user_id=dispute.opened_by_user_id,
+            type_slug="dispute-resolved",
+            title=f"Dispute {status_str.capitalize()}",
+            body=f"Your dispute for payment #{dispute.payment_id} was {status_str}."
+        )
+
+        return {"message": f"Dispute successfully updated to {status_str}"}
