@@ -10,10 +10,16 @@ from sqlalchemy import func, not_, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
 from schemas.client_schema import ReviewCoachSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
+from db import db
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func, not_, select, desc
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema
+from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema
+from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
 from models.coach_hire_requests import StatusEnum
 from models.invoices import StatusEnumList
-from schemas.client_schema import DailySurveySchema, HireRequestStatusSchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_client_relationships import status_enum
 from .utils import create_notification
@@ -558,6 +564,7 @@ class CoachBrowseFilter(MethodView):
             CoachProfiles.coach_profile_id,
             Users.first_name,
             Users.last_name,
+            Users.user_id, 
             Specialties.name.label("specialty_name"),
             CoachProfiles.years_experience,
             CoachProfiles.bio,
@@ -565,19 +572,18 @@ class CoachBrowseFilter(MethodView):
         )\
         .join(Users, CoachProfiles.user_id == Users.user_id)\
         .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)\
+        .outerjoin(PaymentPlans)\
+        .outerjoin(CoachAvailability)\
         .filter(CoachProfiles.status == ApprovalStatusEnum.approved)
 
         if min_price is not None:
-            query = query.join(PaymentPlans)\
-                .filter(PaymentPlans.amount >= min_price)
+            query = query.filter(PaymentPlans.amount >= min_price)
 
         if max_price is not None:
-            query = query.join(PaymentPlans)\
-                .filter(PaymentPlans.amount <= max_price)
+            query = query.filter(PaymentPlans.amount <= max_price)
 
         if day_of_week is not None:
-            query = query.join(CoachAvailability)\
-                .filter(CoachAvailability.day_of_week == day_of_week)
+            query = query.filter(CoachAvailability.day_of_week == day_of_week)
 
         if specialty_id:
             query = query.filter(CoachProfiles.specialty_id == specialty_id)
@@ -1456,3 +1462,403 @@ class ResolveDispute(MethodView):
         )
 
         return {"message": f"Dispute successfully updated to {status_str}"}
+@coach_blp.route("/clients/<int:client_id>/workouts/plan")
+class ClientWorkoutPlanCreation(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(ClientWorkoutPlanCreateSchema)
+    @coach_blp.response(201, ClientWorkoutPlanSchema)
+    def post(self, client_id, data):
+        """Create complete workout plan for client with weekly schedule"""
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        coach_profile = get_coach_profile_from_user(coach_user)
+        
+        if not coach_profile:
+            abort(403, description="Coach profile required.")
+        
+        # Verify coach is employed by client
+        if not is_coach_employed_by_client(coach_user.user_id, client_id):
+            abort(403, description="Not authorized to create workouts for this client.")
+        
+        # Create workout plan
+        workout_plan = WorkoutPlans(
+            owner_user_id=coach_user.user_id,
+            name=data['name'],
+            description=data.get('description'),
+            is_public=False
+        )
+        db.session.add(workout_plan)
+        db.session.flush()  # Get plan_id
+        
+        # Create workout days based on weekly schedule
+        for day_schedule in data['weekly_schedule']:
+            workout_day = WorkoutPlanDays(
+                plan_id=workout_plan.plan_id,
+                weekday=day_schedule['weekday'],
+                session_time=day_schedule.get('session_time')
+            )
+            db.session.add(workout_day)
+            db.session.flush()  # Get day_id
+            
+            # Add exercises to the day
+            for exercise_data in day_schedule['exercises']:
+                day_exercise = WorkoutPlanDayExercises(
+                    day_id=workout_day.plan_day_id,
+                    exercise_id=exercise_data['exercise_id'],
+                    sets=exercise_data['sets'],
+                    reps=exercise_data['reps'],
+                    weight=exercise_data.get('weight'),
+                    duration_minutes=exercise_data.get('duration_minutes'),
+                    notes=exercise_data.get('notes'),
+                    sort_order=exercise_data.get('sort_order', 1)
+                )
+                db.session.add(day_exercise)
+        
+        # Create assignment
+        assignment = WorkoutPlanAssignments(
+            plan_id=workout_plan.plan_id,
+            assigned_to_user_id=client_id,
+            assigned_by_user_id=coach_user.user_id,
+            assignment_type='coach',
+            start_date=data['start_date'],
+            end_date=data.get('end_date'),
+            repeat_rule=data.get('repeat_rule', 'weekly'),
+            status='active'
+        )
+        db.session.add(assignment)
+        
+        try:
+            db.session.commit()
+            
+            # Return complete response
+            response_data = {
+                'plan_id': workout_plan.plan_id,
+                'name': workout_plan.name,
+                'description': workout_plan.description,
+                'owner_user_id': workout_plan.owner_user_id,
+                'created_at': workout_plan.created_at,
+                'weekly_schedule': data['weekly_schedule'],
+                'assignment_id': assignment.assignment_id,
+                'assigned_to_client_id': client_id,
+                'assigned_by_coach_id': coach_profile.coach_profile_id,
+                'start_date': data['start_date'],
+                'end_date': data.get('end_date'),
+                'repeat_rule': data.get('repeat_rule', 'weekly'),
+                'status': 'active'
+            }
+            return response_data
+            
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Failed to create workout plan: {str(e)}")
+
+
+@coach_blp.route("/clients/<int:client_id>/workouts/assigned")
+class ClientWorkoutAssignments(MethodView):
+    @jwt_required()
+    @coach_blp.response(200, ClientWorkoutAssignmentsSchema)
+    def get(self, client_id):
+        """Get all workout assignments for client"""
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+        
+        # Verify coach is employed by client
+        if not is_coach_employed_by_client(coach_user.user_id, client_id):
+            abort(403, description="Not authorized to view this client's workouts.")
+        
+        # Get all assignments for client created by this coach
+        assignments = db.session.query(
+            WorkoutPlanAssignments, WorkoutPlans
+        ).join(
+            WorkoutPlans, WorkoutPlanAssignments.plan_id == WorkoutPlans.plan_id
+        ).filter(
+            WorkoutPlanAssignments.assigned_to_user_id == client_id,
+            WorkoutPlanAssignments.assigned_by_user_id == coach_user.user_id
+        ).all()
+        
+        assignment_list = []
+        active_count = 0
+        completed_count = 0
+        
+        for assignment, plan in assignments:
+            assignment_data = {
+                'plan_id': plan.plan_id,
+                'name': plan.name,
+                'description': plan.description,
+                'owner_user_id': plan.owner_user_id,
+                'created_at': plan.created_at,
+                'weekly_schedule': [],  # Would need to fetch from WorkoutPlanDays
+                'assignment_id': assignment.assignment_id,
+                'assigned_to_client_id': client_id,
+                'assigned_by_coach_id': coach_user.user_id,
+                'start_date': assignment.start_date,
+                'end_date': assignment.end_date,
+                'repeat_rule': assignment.repeat_rule.value if assignment.repeat_rule else None,
+                'status': assignment.status.value if assignment.status else None
+            }
+            
+            assignment_list.append(assignment_data)
+            
+            if assignment.status == 'active':
+                active_count += 1
+            elif assignment.status == 'completed':
+                completed_count += 1
+        
+        return {
+            'assignments': assignment_list,
+            'total_active': active_count,
+            'total_completed': completed_count
+        }
+            
+            
+# Dashboard Helper Functions
+def is_coach_employed_by_client(coach_user_id, client_user_id):
+    """Check if coach has active employment relationship with client"""
+    coach_profile = CoachProfiles.query.filter_by(user_id=coach_user_id).first()
+    if not coach_profile:
+        return False
+    
+    relationship = CoachClientRelationships.query.filter_by(
+        coach_profile_id=coach_profile.coach_profile_id,
+        client_user_id=client_user_id,
+        status=status_enum.active
+    ).first()
+    
+    return relationship is not None
+
+def get_coach_profile_from_user(user):
+    """Get coach profile from user object"""
+    return CoachProfiles.query.filter_by(user_id=user.user_id).first()
+
+def calculate_progress_summary(client_user_id, days=30):
+    """Calculate progress summary for client over specified days"""
+    from datetime import date, timedelta
+    
+    start_date = date.today() - timedelta(days=days)
+    
+    # Daily Survey averages
+    surveys = DailySurvey.query.filter(
+        DailySurvey.user_id == client_user_id,
+        DailySurvey.date >= start_date
+    ).all()
+    
+    avg_energy = func.avg(DailySurvey.energy_level).filter(
+        DailySurvey.user_id == client_user_id,
+        DailySurvey.date >= start_date,
+        DailySurvey.energy_level.isnot(None)
+    ).scalar() or 0
+    
+    avg_mood = func.avg(DailySurvey.mood_score).filter(
+        DailySurvey.user_id == client_user_id,
+        DailySurvey.date >= start_date,
+        DailySurvey.mood_score.isnot(None)
+    ).scalar() or 0
+    
+    avg_sleep = func.avg(DailySurvey.sleep_hours).filter(
+        DailySurvey.user_id == client_user_id,
+        DailySurvey.date >= start_date,
+        DailySurvey.sleep_hours.isnot(None)
+    ).scalar() or 0
+    
+    # Workout completion rate
+    total_workouts = WorkoutLogs.query.filter(
+        WorkoutLogs.user_id == client_user_id,
+        WorkoutLogs.created_at >= start_date
+    ).count()
+    
+    # Nutrition logging rate
+    total_meals = MealLogs.query.filter(
+        MealLogs.user_id == client_user_id,
+        MealLogs.created_at >= start_date
+    ).count()
+    
+    # Goals status
+    active_goals = Goals.query.filter_by(
+        for_user_id=client_user_id,
+        status='active'
+    ).count()
+    
+    completed_goals = Goals.query.filter_by(
+        for_user_id=client_user_id,
+        status='completed'
+    ).count()
+    
+    return {
+        'avg_energy_level': float(avg_energy) if avg_energy else 0,
+        'avg_mood_score': float(avg_mood) if avg_mood else 0,
+        'avg_sleep_hours': float(avg_sleep) if avg_sleep else 0,
+        'workout_completion_rate': min(total_workouts / max(days * 0.7, 1), 1.0),  # Assume 70% target
+        'nutrition_logging_rate': min(total_meals / max(days * 3, 1), 1.0),  # 3 meals/day target
+        'active_goals_count': active_goals,
+        'completed_goals_count': completed_goals,
+        'total_workouts_completed': total_workouts,
+        'days_tracked': len(set(s.date for s in surveys))
+    }
+
+def get_recent_activity(client_user_id, days=7):
+    """Get recent activity for client"""
+    from datetime import date, timedelta
+    
+    start_date = date.today() - timedelta(days=days)
+    activities = []
+    
+    # Recent surveys
+    surveys = DailySurvey.query.filter(
+        DailySurvey.user_id == client_user_id,
+        DailySurvey.date >= start_date
+    ).order_by(DailySurvey.date.desc()).limit(5).all()
+    
+    for survey in surveys:
+        activities.append({
+            'date': survey.date,
+            'activity_type': 'survey',
+            'description': f'Daily wellness survey completed',
+            'details': {
+                'energy_level': survey.energy_level,
+                'mood_score': survey.mood_score
+            }
+        })
+    
+    # Recent workouts
+    workouts = WorkoutLogs.query.filter(
+        WorkoutLogs.user_id == client_user_id,
+        WorkoutLogs.created_at >= start_date
+    ).order_by(WorkoutLogs.created_at.desc()).limit(5).all()
+    
+    for workout in workouts:
+        activities.append({
+            'date': workout.created_at.date(),
+            'activity_type': 'workout',
+            'description': f'Workout completed',
+            'details': {
+                'sets': workout.sets,
+                'reps': workout.reps
+            }
+        })
+    
+    # Sort by date
+    activities.sort(key=lambda x: x['date'], reverse=True)
+    return activities[:10]  # Return last 10 activities
+
+def get_goals_status(client_user_id):
+    """Get current goals status for client"""
+    goals = Goals.query.filter_by(for_user_id=client_user_id).order_by(Goals.created_at.desc()).all()
+    
+    goals_status = []
+    for goal in goals:
+        progress_percentage = 0  # Simple placeholder - could be calculated based on goal type
+        if goal.status == 'completed':
+            progress_percentage = 100
+        
+        goals_status.append({
+            'goal_id': goal.goal_id,
+            'description': goal.description,
+            'status': goal.status,
+            'progress_percentage': progress_percentage,
+            'created_at': goal.created_at,
+            'target_date': goal.target_date
+        })
+    
+    return goals_status
+
+# Dashboard Endpoints
+@coach_blp.route("/dashboard/clients")
+class CoachClientDashboard(MethodView):
+    @jwt_required()
+    @coach_blp.response(200, ClientListSchema)
+    def get(self):
+        """Get list of employed clients with basic progress overview"""
+        coach_user_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=coach_user_id).first()
+        
+        if not coach_user:
+            abort(404, description="Coach user not found.")
+        
+        coach_profile = get_coach_profile_from_user(coach_user)
+        if not coach_profile:
+            abort(404, description="Coach profile not found.")
+        
+        # Get active relationships
+        relationships = CoachClientRelationships.query.filter_by(
+            coach_profile_id=coach_profile.coach_profile_id,
+            status=status_enum.active
+        ).all()
+        
+        clients_data = []
+        for relationship in relationships:
+            client_user = Users.query.get(relationship.client_user_id)
+            if not client_user:
+                continue
+            
+            # Calculate progress summary
+            progress_summary = calculate_progress_summary(client_user.user_id, days=30)
+            
+            # Get recent activity
+            recent_activity = get_recent_activity(client_user.user_id, days=7)
+            
+            # Get goals status
+            goals_status = get_goals_status(client_user.user_id)
+            
+            clients_data.append({
+                'client_info': {
+                    'user_id': client_user.user_id,
+                    'first_name': client_user.first_name,
+                    'last_name': client_user.last_name,
+                    'relationship_start_date': relationship.started_at,
+                    'relationship_status': relationship.status.value
+                },
+                'progress_summary': progress_summary,
+                'recent_activity': recent_activity,
+                'goals_status': goals_status
+            })
+        
+        return {'clients': clients_data}
+
+@coach_blp.route("/dashboard/clients/<int:client_id>/progress")
+class ClientProgressDetail(MethodView):
+    @jwt_required()
+    @coach_blp.response(200, ClientDashboardSchema)
+    def get(self, client_id):
+        """Get detailed progress data for specific client"""
+        coach_user_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=coach_user_id).first()
+        
+        if not coach_user:
+            abort(404, description="Coach user not found.")
+        
+        # Verify employment relationship
+        if not is_coach_employed_by_client(coach_user.user_id, client_id):
+            abort(403, description="Not authorized to view this client's progress.")
+        
+        client_user = Users.query.get(client_id)
+        if not client_user:
+            abort(404, description="Client not found.")
+        
+        # Get relationship details
+        coach_profile = get_coach_profile_from_user(coach_user)
+        relationship = CoachClientRelationships.query.filter_by(
+            coach_profile_id=coach_profile.coach_profile_id,
+            client_user_id=client_id,
+            status=status_enum.active
+        ).first()
+        
+        if not relationship:
+            abort(404, description="Client relationship not found.")
+        
+        # Calculate detailed progress
+        progress_summary = calculate_progress_summary(client_user.user_id, days=90)
+        recent_activity = get_recent_activity(client_user.user_id, days=30)
+        goals_status = get_goals_status(client_user.user_id)
+        
+        return {
+            'client_info': {
+                'user_id': client_user.user_id,
+                'first_name': client_user.first_name,
+                'last_name': client_user.last_name,
+                'relationship_start_date': relationship.started_at,
+                'relationship_status': relationship.status.value
+            },
+            'progress_summary': progress_summary,
+            'recent_activity': recent_activity,
+            'goals_status': goals_status
+        }
