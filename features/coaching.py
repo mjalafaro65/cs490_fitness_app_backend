@@ -3,6 +3,13 @@ from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes
+from db import db
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func, not_, select, desc
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
+from schemas.client_schema import ReviewCoachSchema
+from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
 from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -18,6 +25,8 @@ from models.coach_client_relationships import status_enum
 from .utils import create_notification
 from datetime import datetime, timezone
 from .conversation_services import create_conversation
+from models.refund_disputes import StatusEnum_Disputes
+from models.payments import StatusEnum_Payments
 
 
 
@@ -1010,7 +1019,6 @@ class CoachAcceptHireRequest(MethodView):
         if hire_request.status != StatusEnum.pending:
             abort(400, description="Request is no longer pending")
 
-
         hire_request.status = StatusEnum.accepted
         hire_request.decided_at = db.func.now()
 
@@ -1021,10 +1029,9 @@ class CoachAcceptHireRequest(MethodView):
             status="active", 
             started_at=db.func.now()
         )
-        
         db.session.add(new_relationship)
+        db.session.flush() 
         
-        db.session.flush()
         
         
         #create conversation
@@ -1036,22 +1043,65 @@ class CoachAcceptHireRequest(MethodView):
             conversation_type="relationship",
             relationship_id=new_relationship.relationship_id
         )
-        
+      
 
-        create_notification(
-                user_id=hire_request.client_user_id,
-                type_slug="coach-request-accepted",
-                title="Accepted Coach Request",
-                body=f"Your coach hire request has been canceled"
+        plan = PaymentPlans.query.get(hire_request.payment_plan_id)
+        default_pm = PaymentMethods.query.filter_by(
+            user_id=hire_request.client_user_id,
+            is_default=True,
+            is_active=True
+        ).first()
+        
+        now_utc = datetime.now(timezone.utc)
+        
+      
+
+        new_invoice = Invoices(
+            relationship_id=new_relationship.relationship_id,
+            payment_method_id=default_pm.payment_method_id if default_pm else None,
+            status=StatusEnumList.issued,
+            currency="USD",
+            subtotal=plan.amount,
+            created_at=now_utc,
+            issued_at=now_utc
+        )
+        db.session.add(new_invoice)
+        db.session.flush()
+
+     
+        if default_pm:
+            new_payment = Payments(
+                invoice_id=new_invoice.invoice_id,
+                payer_user_id=hire_request.client_user_id,
+                amount=plan.amount,
+                status="succeeded",
+                is_auto_pay=1, 
+                provider=default_pm.provider,
+                provider_ref=default_pm.token,
+                created_at=now_utc,
+                processed_at=now_utc
             )
-        
-        
+            new_invoice.status = StatusEnumList.paid
+            new_invoice.pay_date = now_utc
+            db.session.add(new_payment)
+            
+            notification_body = f"Coach {coach_user.first_name} accepted your request! Initial payment of ${plan.amount} processed automatically."
+        else:
+            notification_body = f"Coach {coach_user.first_name} accepted your request! Please check your billing to pay your first invoice."
+
         db.session.commit()
 
+        create_notification(
+            user_id=hire_request.client_user_id,
+            type_slug="coach-request-accepted",
+            title="Request Accepted",
+            body=notification_body
+        )
 
         return {
-            "message": "Client accepted and relationship activated",
-            "relationship_id": new_relationship.relationship_id
+            "message": "Relationship activated and initial payment processed",
+            "relationship_id": new_relationship.relationship_id,
+            "invoice_id": new_invoice.invoice_id
         }
     
 
@@ -1208,12 +1258,13 @@ class CoachGenerateInvoice(MethodView):
         
         rel_id = data.get("relationship_id")
         input_amount = data.get("amount")
+        input_pay_date = data.get("pay_date")
 
         result = db.session.execute(
             select(CoachClientRelationships)
             .where(
                 CoachClientRelationships.relationship_id == rel_id,
-                CoachClientRelationships.status == status_enum.active, #
+                CoachClientRelationships.status == status_enum.active,
                 CoachClientRelationships.coach_profile_id.in_(
                     select(CoachProfiles.coach_profile_id).where(CoachProfiles.user_id == coach_user.user_id)
                 )
@@ -1229,17 +1280,17 @@ class CoachGenerateInvoice(MethodView):
             select(PaymentMethods).where(PaymentMethods.user_id == rel.client_user_id)
         ).scalar_one_or_none()
 
-        current_status = StatusEnumList.issued 
-        now_utc = datetime.now(timezone.utc) 
-
+        now_utc = datetime.now(timezone.utc)
+        
         new_invoice = Invoices(
-            relationship_id=rel.relationship_id, 
-            payment_method_id=payment_method.payment_method_id if payment_method else None, 
-            status=current_status, 
-            currency="USD", 
-            subtotal=input_amount, 
-            created_at=now_utc, 
-            issued_at=now_utc 
+            relationship_id=rel.relationship_id,
+            payment_method_id=payment_method.payment_method_id if payment_method else None,
+            status=StatusEnumList.issued,
+            currency="USD",
+            subtotal=input_amount,
+            created_at=now_utc,
+            issued_at=now_utc,
+            pay_date=input_pay_date 
         )
 
         db.session.add(new_invoice)
@@ -1256,9 +1307,10 @@ class CoachGenerateInvoice(MethodView):
 
         return {
             "message": "Invoice generated and client notified",
-            "invoice_id": new_invoice.invoice_id, #
-            "status": new_invoice.status.value, #
-            "amount": float(input_amount)
+            "invoice_id": new_invoice.invoice_id,
+            "status": new_invoice.status.value,
+            "amount": float(input_amount),
+            "pay_date": new_invoice.pay_date.isoformat() if new_invoice.pay_date else None
         }, 201
     
 
@@ -1363,6 +1415,76 @@ class FavoriteCoach(MethodView):
             abort(500, description="Failed to favorite coach.")
 
 
+
+@coach_blp.route("/disputes")
+class CoachDisputeList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        results = db.session.execute(
+            select(RefundDisputes, Payments.amount, Users.first_name, Users.last_name)
+            .join(Payments, RefundDisputes.payment_id == Payments.payment_id)
+            .join(Invoices, Payments.invoice_id == Invoices.invoice_id)
+            .join(CoachClientRelationships, Invoices.relationship_id == CoachClientRelationships.relationship_id)
+            .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
+            .join(Users, RefundDisputes.opened_by_user_id == Users.user_id) # Client Info
+            .where(CoachProfiles.user_id == coach_user.user_id)
+            .order_by(RefundDisputes.created_at.desc())
+        ).all()
+
+        return {
+            "disputes": [
+                {
+                    "dispute_id": d.refund_dispute_id,
+                    "payment_id": d.payment_id,
+                    "client_name": f"{fname} {lname}",
+                    "amount": float(amt),
+                    "reason": d.reason,
+                    "status": d.status.value, 
+                    "created_at": d.created_at.isoformat()
+                } for d, amt, fname, lname in results
+            ]
+        }
+    
+
+
+
+
+@coach_blp.route("/resolve-dispute")
+class ResolveDispute(MethodView):
+    @jwt_required()
+    @coach_blp.arguments(ResolveDisputeSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        coach = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        dispute = RefundDisputes.query.get_or_404(data["dispute_id"])
+        
+        dispute.status = data["status"] 
+        dispute.resolution_notes = data["notes"]
+        dispute.resolved_at = datetime.now(timezone.utc)
+        dispute.resolved_by_id = coach.user_id
+
+        # if Refund is Approved
+        if data["status"] == StatusEnum_Disputes.approved:
+            payment = Payments.query.get(dispute.payment_id)
+            if payment:
+                payment.status = StatusEnum_Payments.refunded
+
+        db.session.commit()
+
+        status_str = data["status"].value 
+        
+        create_notification(
+            user_id=dispute.opened_by_user_id,
+            type_slug="dispute-resolved",
+            title=f"Dispute {status_str.capitalize()}",
+            body=f"Your dispute for payment #{dispute.payment_id} was {status_str}."
+        )
+
+        return {"message": f"Dispute successfully updated to {status_str}"}
 @coach_blp.route("/clients/<int:client_id>/workouts/plan")
 class ClientWorkoutPlanCreation(MethodView):
     @jwt_required()
