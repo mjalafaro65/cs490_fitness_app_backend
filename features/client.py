@@ -12,12 +12,12 @@ from models.refund_disputes import StatusEnum_Disputes
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
-from models import Users, Goals, PaymentMethods, Payments
+from models import Users, Goals, PaymentMethods, Payments, Specialties
 from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
 from datetime import datetime, timezone
-from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema
+from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema, InitiateFireSchema, ConfirmTerminationSchema
 
 from models.invoices import StatusEnumList
 from models.payments import StatusEnum_Payments
@@ -968,6 +968,172 @@ class CreateDispute(MethodView):
             "dispute_id": new_dispute.refund_dispute_id,
             "status": new_dispute.status.value
         }, 201
+    
+
+@client_blp.route("/my-coaches")
+class ClientCoachList(MethodView):
+    @jwt_required()
+    def get(self):
+        current_auth_id = get_jwt_identity()
+        client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        results = db.session.execute(
+            select(
+                CoachClientRelationships.relationship_id, 
+                Users.first_name, 
+                Users.last_name, 
+                Specialties.name.label("specialty_name"), 
+                CoachClientRelationships.started_at
+            )
+            .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
+            .join(Users, CoachProfiles.user_id == Users.user_id)
+            .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)
+            .where(
+                CoachClientRelationships.client_user_id == client.user_id,
+                CoachClientRelationships.status == status_enum.active
+            )
+            .distinct() 
+        ).all()
+
+        return {
+            "active_relationships": [
+                {
+                    "relationship_id": r.relationship_id,
+                    "coach_name": f"{r.first_name} {r.last_name}",
+                    "specialty": r.specialty_name, 
+                    "started_at": r.started_at.isoformat()
+                } for r in results
+            ]
+        }
+    
+
+@client_blp.route("/initiate-fire-coach")
+class InitiateFireCoach(MethodView):
+    @jwt_required()
+    @client_blp.arguments(InitiateFireSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        rel = CoachClientRelationships.query.filter_by(
+            relationship_id=data["relationship_id"],
+            client_user_id=client.user_id
+        ).first_or_404()
+
+        if rel.status != status_enum.active:
+            return {
+                "message": "This relationship is already inactive.",
+                "status": "blocked"
+            }, 400
+
+        create_notification(
+            user_id=client.user_id,
+            type_slug="termination-warning",
+            title="Termination Initiated",
+            body=(
+                "You have initiated the process to end your coaching relationship. "
+                "Please confirm to finalize. Note: Access to training plans will be revoked "
+                "and recurring billing will stop immediately upon confirmation."
+            )
+        )
+
+        return {
+            "warning": "Termination Warning",
+            "consequences": [
+                "Immediate loss of access to custom training plans.",
+                "All future automated payments will be cancelled.",
+                "Upcoming sessions will be removed from your schedule."
+            ],
+            "proceed_to_confirmation": True,
+            "relationship_id": rel.relationship_id
+        }
+    
+
+
+@client_blp.route("/confirm-fire-coach")
+class ConfirmFireCoach(MethodView):
+    @jwt_required()
+    @client_blp.arguments(ConfirmTerminationSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        rel = CoachClientRelationships.query.filter_by(
+            relationship_id=data["relationship_id"],
+            client_user_id=client.user_id
+        ).first_or_404()
+
+        unpaid_invoices = Invoices.query.filter_by(
+            relationship_id=rel.relationship_id,
+            status=StatusEnumList.issued 
+        ).all()
+
+        for inv in unpaid_invoices:
+            inv.status = StatusEnumList.voided
+
+        rel.status = status_enum.terminated
+        rel.termination_reason = data.get("reason")
+        rel.ended_at = datetime.now(timezone.utc)
+
+        db.session.commit()
+
+        coach_profile = CoachProfiles.query.get(rel.coach_profile_id)
+        
+        create_notification(
+            user_id=coach_profile.user_id,
+            type_slug="relationship-terminated",
+            title="Relationship Ended",
+            body=f"Client {client.first_name} {client.last_name} has ended the coaching relationship. Any pending invoices have been voided."
+        )
+
+        create_notification(
+            user_id=client.user_id,
+            type_slug="termination-confirmed",
+            title="Coach Fired Successfully",
+            body="The relationship has been terminated and your pending billing for this coach was voided."
+        )
+
+        return {
+            "message": "Termination processed successfully. Invoices voided.",
+            "status": "terminated"
+        }
+    
+
+@client_blp.route("/rehire-coach")
+class RehireCoach(MethodView):
+    @jwt_required()
+    @client_blp.arguments(InitiateFireSchema)
+    def post(self, data):
+        current_auth_id = get_jwt_identity()
+        client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        old_rel = CoachClientRelationships.query.filter_by(
+            relationship_id=data["relationship_id"],
+            client_user_id=client.user_id,
+            status=status_enum.terminated 
+        ).first_or_404()
+
+        coach_profile = CoachProfiles.query.get(old_rel.coach_profile_id)
+        if not coach_profile:
+            return {"message": "This coach is no longer available for rehire."}, 404
+
+        old_rel.status = status_enum.active 
+        old_rel.termination_reason = None 
+        old_rel.ended_at = None
+        
+        db.session.commit()
+
+        create_notification(
+            user_id=coach_profile.user_id,
+            type_slug="rehire",
+            title="New Rehire",
+            body=f"Your former client {client.first_name} {client.last_name} wants to work with you again!"
+        )
+
+        return {
+            "message": "Rehire previously fired coach",
+            "status": "pending"
+        }
             
 # <<<<<<< Coach-favorite-feature
 # ### Coach Favorites Management
