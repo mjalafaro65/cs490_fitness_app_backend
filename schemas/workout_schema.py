@@ -1,4 +1,7 @@
 from marshmallow import Schema, fields, validate, pre_load
+from models import Exercises,WorkoutPlanDayExercises, WorkoutPlans, CalendarWorkouts, WorkoutPlanDays
+from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+
 
 
 class ExerciseCreateSchema(Schema):
@@ -131,15 +134,76 @@ class PlanCalendarSchema(Schema):
     occurrences = fields.List(fields.Nested(CalendarOccurrenceSchema), required=True)
 from marshmallow import Schema, fields, validate
 
-class WorkoutLogSchema(Schema):
+class WorkoutLogEntrySchema(Schema):
+    workout_log_entry_id= fields.Int(dump_only=True)
+    calendar_workout_id = fields.Int(required=True)
+    plan_day_exercise_id = fields.Int(allow_none=True)
     exercise_id = fields.Int(required=True)
-    plan_day_exercise_id = fields.Int(dump_only=True)
-    sets = fields.Int(validate=validate.Range(min=0))
-    reps = fields.Int(validate=validate.Range(min=0))
-    weight = fields.Float(validate=validate.Range(min=0))
-    rpe = fields.Int(validate=validate.Range(min=0))
-    distance = fields.Float(validate=validate.Range(min=0))
-    calories = fields.Float(validate=validate.Range(min=0))
-    duration_minutes = fields.Float(validate=validate.Range(min=0))
-    notes = fields.Str(validate=validate.Length(max=1000))
 
+    sets = fields.Int(allow_none=True)
+    reps = fields.Int(allow_none=True)
+    weight = fields.Float(allow_none=True)
+    rpe = fields.Float(allow_none=True)
+    distance = fields.Float(allow_none=True)
+    duration_minutes = fields.Float(allow_none=True)
+    notes = fields.Str(allow_none=True)
+
+class WorkoutLogSchema(Schema):
+    workout_log_id = fields.Int(dump_only=True)
+    user_id =fields.Int(allow_none=True)
+    calendar_workout_id = fields.Int(allow_none=True)
+    notes = fields.Str()
+
+    entries = fields.List(fields.Nested(WorkoutLogEntrySchema))
+
+
+    
+class WorkoutLogQuerySchema(Schema):
+    client_id = fields.Int(allow_none=True)
+    calendar_workout_id = fields.Int(required=False)
+
+
+
+class CalendarWorkoutQuerySchema(Schema):
+    date = fields.Date(required=False)
+    view = fields.Str(required=False) 
+
+
+class ExerciseSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = Exercises
+        load_instance = True
+        
+class PlanDayExerciseSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlanDayExercises
+        load_instance = True
+
+    exercise = fields.Nested(ExerciseSchema)
+
+
+
+
+
+class PlanSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlans
+        load_instance = True
+
+class PlanDaySchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlanDays
+        load_instance = True
+
+    exercises = fields.Nested(PlanDayExerciseSchema, many=True)
+    plan = fields.Nested(PlanSchema)
+
+class CalendarViewSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = CalendarWorkouts
+        load_instance = True
+
+    plan_day = fields.Nested(PlanDaySchema)
+    
+class CalendarWorkoutQuerySchemaWeek(Schema):
+    view = fields.String(required=False)
