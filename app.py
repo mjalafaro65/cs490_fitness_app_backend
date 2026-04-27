@@ -20,6 +20,7 @@ from features.messaging import messaging_blp
 from features.socketio_events import socketio
 from features.user import user_blp
 from features.nutrition import nutrition_bp
+from features.insights import insights_blp
 
 load_dotenv()
 
@@ -88,6 +89,7 @@ api.register_blueprint(notif_blp)
 api.register_blueprint(messaging_blp)
 api.register_blueprint(user_blp)
 api.register_blueprint(nutrition_bp)
+api.register_blueprint(insights_blp)
 
 
 

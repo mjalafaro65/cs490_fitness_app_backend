@@ -22,3 +22,6 @@ class CoachClientRelationships(db.Model):
     termination_reason = db.Column(db.String(255))
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     ended_at = db.Column(db.DateTime,  nullable=True, default=datetime.utcnow)
+    
+    coach_profile = db.relationship("CoachProfiles", backref="relationships")
+    client = db.relationship("Users", backref="client_relationships")

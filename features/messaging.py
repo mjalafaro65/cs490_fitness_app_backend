@@ -512,6 +512,14 @@ class InboxView(MethodView):
                 other_user_id = rel.client_user_id
             else:
                 other_user_id = rel.coach_profile.user_id
+            
+            if coach_profile:
+                other_user_id = rel.client_user_id
+            else:
+                other_user_id = rel.coach_profile_id 
+
+                coach = CoachProfiles.query.get(other_user_id)
+                other_user_id = coach.user_id
 
             other_user = Users.query.get(other_user_id)
 
@@ -553,7 +561,8 @@ class InboxView(MethodView):
                 ).first()
                 if coach_prof:
                     profile_picture = coach_prof.profile_photo 
-
+                    
+       
             # 5. response
             result.append({
                 "relationship_id": rel.relationship_id,
