@@ -29,3 +29,10 @@ class ResolveDisputeSchema(Schema):
     # This validates against your StatusEnum_Disputes values ('approved', 'rejected', etc.)
     status = fields.Enum(StatusEnum_Disputes, by_value=True, required=True)
     notes = fields.Str(required=True)
+
+class InitiateFireSchema(Schema):
+    relationship_id = fields.Int(required=True)
+
+class ConfirmTerminationSchema(Schema):
+    relationship_id = fields.Int(required=True)
+    reason = fields.Str(required=False, allow_none=True) # Matches your DB column
