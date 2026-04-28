@@ -362,8 +362,8 @@ class GoalsProgressView(MethodView):
             {
                 "goal_id": g.goal_id,
                 "title": g.title,
-                "goal_type": g.goal_type,
-                "status": g.status,
+                "goal_type": g.goal_type.value,
+                "status": g.status.value,
                 "target_value": float(g.target_value) if g.target_value else None,
                 "unit": g.unit,
                 "start_date": g.start_date.isoformat() if g.start_date else None,
