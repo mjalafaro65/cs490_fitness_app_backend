@@ -32,3 +32,7 @@ class CoachProfiles(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     specialty = db.relationship("Specialties")
+    
+    user=db.relationship("Users", backref="coach_profiles", foreign_keys=[user_id])
+    
+

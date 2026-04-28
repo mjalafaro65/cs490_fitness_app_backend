@@ -3,7 +3,25 @@ from operator import or_
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes
+from models import(
+     Users,
+     CoachReviews,
+     UserRoles,
+     CoachProfiles, 
+     Specialties, 
+     CoachProgressPhotos, 
+     Roles, 
+     CoachDocuments, 
+     DailySurvey,
+     WorkoutPlanAssignments, 
+     MealPlanAssignments, 
+     CoachFavorites, 
+     CoachHireRequests, 
+     PaymentPlans, 
+     CoachClientRelationships, 
+     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes,
+     
+     )
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
@@ -200,33 +218,41 @@ class CoachProfileView(MethodView):
         """
         curr_auth_id = get_jwt_identity()
 
-
+        # get current user_id if logged in
         if curr_auth_id:
-            result = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).first()
+            result = db.session.query(Users.user_id)\
+                .filter_by(auth_id=curr_auth_id).first()
             curr_user_id = result[0] if result else None
         else:
-            curr_user_id=None            
+            curr_user_id = None
 
-       
         target_user_id = args.get("user_id")
+        profile_id = args.get("coach_profile_id")
 
-        if not target_user_id and not curr_auth_id:
-            return {"message": "user_id not obtained"}, 404
+        # priority 1: profile_id
+        if profile_id:
+            profile = CoachProfiles.query.filter_by(
+                coach_profile_id=profile_id
+            ).join(Users, Users.user_id ==CoachProfiles.user_id).first()
 
-        #if target id is provided check if its the logged in user
-        #######need to check if its admin or client doing the call
-        if target_user_id and target_user_id != curr_user_id:
-            
-            profile = CoachProfiles.query.filter_by(user_id=target_user_id).first()
-        
+        # priority 2: user_id (other user)
+        elif target_user_id and target_user_id != curr_user_id:
+            profile = CoachProfiles.query.filter_by(
+                user_id=target_user_id
+            ).join(Users, Users.user_id ==CoachProfiles.user_id).first()
+
+        # fallback: current user
+        elif curr_user_id:
+            profile = CoachProfiles.query.filter_by(
+                user_id=curr_user_id
+            ).join(Users, Users.user_id ==CoachProfiles.user_id).first()
+
         else:
-            profile = CoachProfiles.query.filter_by(user_id=curr_user_id).first()
-        
-        print(profile)
+            return {"message": "No identifier provided"}, 400
 
         if not profile:
-            return {"message":"Coach profile not found."}, 404
-        
+            return {"message": "Coach profile not found."}, 404
+
         return profile
     
     
@@ -597,7 +623,7 @@ class CoachBrowseFilter(MethodView):
         
 
         
-@coach_blp.route("/coach/availability")
+@coach_blp.route("/availability")
 class CoachAvailabilityView(MethodView):
 
     @jwt_required()
@@ -673,7 +699,7 @@ class CoachAvailabilityView(MethodView):
 
         return availability
 
-@coach_blp.route("/coach/availability/<int:availability_id>")
+@coach_blp.route("/availability/<int:availability_id>")
 class CoachAvailabilityEditView(MethodView):
 
     @jwt_required()
@@ -731,7 +757,7 @@ class CoachAvailabilityEditView(MethodView):
 
 
     
-@coach_blp.route("/coach/<int:coach_profile_id>/availability")
+@coach_blp.route("/<int:coach_profile_id>/availability")
 class CoachAvailabilityPublicView(MethodView):
      
 
