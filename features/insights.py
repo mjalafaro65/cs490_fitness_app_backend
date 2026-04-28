@@ -93,9 +93,7 @@ class SurveyProgressView(MethodView):
         }, 200
 
 
-# ─────────────────────────────────────────────
 # 2. WORKOUTS — completion rate, streaks
-# ─────────────────────────────────────────────
 @insights_blp.route("/workouts")
 class WorkoutProgressView(MethodView):
     @jwt_required()
@@ -257,13 +255,17 @@ class NutritionProgressView(MethodView):
         daily = defaultdict(lambda: {"calories": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "meals": []})
 
         for ml, m in rows:
-            servings = float(ml.servings)
+            servings = float(ml.servings or 0)
             date_key = ml.logged_at.date().isoformat()
 
-            calories  = int(m.calories  * servings) if m.calories  else 0
-            protein_g = float(m.protein_g * servings) if m.protein_g else 0
-            carbs_g   = float(m.carbs_g   * servings) if m.carbs_g   else 0
-            fat_g     = float(m.fat_g     * servings) if m.fat_g     else 0
+            calories  = int((m.calories or 0) * servings) if m.calories  else 0
+            protein_g =  float(m.protein_g or 0) * servings if m.protein_g else 0
+            carbs_g   =float(m.carbs_g or 0) * servings if m.carbs_g   else 0
+            fat_g     =float(m.fat_g or 0) * servings if m.fat_g     else 0
+            
+            
+
+
 
             daily[date_key]["calories"]  += calories
             daily[date_key]["protein_g"] += round(protein_g, 1)
