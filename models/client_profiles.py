@@ -22,3 +22,5 @@ class ClientProfiles(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,onupdate=datetime.utcnow)
     height = db.Column(db.Numeric(5,2), nullable=True)
     weight = db.Column(db.Numeric(5,2), nullable=True)
+
+   

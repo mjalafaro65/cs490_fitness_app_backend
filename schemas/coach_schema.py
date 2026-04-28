@@ -25,12 +25,17 @@ from models import CoachProfiles, CoachDocuments
 from db import db
 
 #done automatically using model
+
+class UserBasicSchema(Schema):
+    user_id = fields.Int()
+    first_name = fields.Str()
+    last_name = fields.Str()
+
 class CoachProfileSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = CoachProfiles
         load_instance = True
         include_fk = True
-        # exclude = ("specialty_id",)
         name = "CoachProfileData"
 
     user_id = fields.Int(dump_only=True)
@@ -48,9 +53,14 @@ class CoachProfileSchema(SQLAlchemyAutoSchema):
     
     specialty_name = fields.String(attribute="specialty.name", dump_only=True)
     
+    user = fields.Nested("UserBasicSchema", allow_none=True)
+
+    
+
 
 class CoachProfileQuerySchema(Schema):
     user_id = fields.Int()
+    coach_profile_id = fields.Int(required=False)
 
 class CoachDocumentSchema(Schema):
     document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'ID', 'Other']))
