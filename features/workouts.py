@@ -239,18 +239,18 @@ def _duplicate_plan_for_user(
 
 @workout_blp.route("/exercises")
 class ExerciseCollection(MethodView):
-    @jwt_required()
+    # @jwt_required()
     @workout_blp.arguments(ExerciseListQuerySchema, location="query")
     @workout_blp.response(200)
     def get(self, args):
         """List exercises you can add to a plan: defaults, published customs, and your own. Enhanced search with keywords and sorting."""
-        user=  _current_user()
+        # user=  _current_user()
 
         q = Exercises.query.filter(Exercises.is_active.is_(True))
         visibility = or_(
             Exercises.created_by_user_id.is_(None),
             Exercises.is_public.is_(True),
-            Exercises.created_by_user_id == user.user_id,
+            # Exercises.created_by_user_id == user.user_id,
         )
         q = q.filter(visibility)
         

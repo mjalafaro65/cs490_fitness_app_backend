@@ -94,8 +94,8 @@ class TopCoach(MethodView):
                     "bio": row.bio,
                     "image": row.profile_photo,
                     "rating": float(round(row.avg_rating, 1)) if row.avg_rating else 0,
-                    "before-photo": row.before_photo_url,
-                    "after-photo": row.after_photo_url,
+                    "before_photo": row.before_photo_url,
+                    "after_photo": row.after_photo_url,
                     "photo-description": row.transformation_desc
                 }
                 for row in result
@@ -1160,7 +1160,7 @@ class CoachActiveRosterView(MethodView):
         if not coach_profile:
             return []
 
-        results = db.session.execute(
+        results = db.session.execute(   
             select(
                 CoachClientRelationships.relationship_id,
                 CoachClientRelationships.status,
@@ -1169,7 +1169,8 @@ class CoachActiveRosterView(MethodView):
                 Users.last_name, 
                 PaymentPlans.payment_plan_id,
                 PaymentPlans.name, 
-                PaymentPlans.billing_type
+                PaymentPlans.billing_type,
+                
             )
             .join(Users, CoachClientRelationships.client_user_id == Users.user_id)
             .join(PaymentPlans, CoachClientRelationships.payment_plan_id == PaymentPlans.payment_plan_id)

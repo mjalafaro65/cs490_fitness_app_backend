@@ -317,36 +317,63 @@ class SendMessage(MethodView):
         db.session.commit()
         return new_message
 
-@messaging_blp.route("/messages/<int:message_id>/read")
-class MarkMessageRead(MethodView):
-    @jwt_required()
-    @messaging_blp.response(200, MessageSchema)
-    def put(self, message_id):
-        """Mark a message as read"""
-        user = _current_user()
+# @messaging_blp.route("/messages/<int:message_id>/read")
+# class MarkMessageRead(MethodView):
+#     @jwt_required()
+#     @messaging_blp.response(200, MessageSchema)
+#     def put(self, message_id):
+#         """Mark a message as read"""
+#         user = _current_user()
         
-        message = Messages.query.get_or_404(message_id)
+#         message = Messages.query.get_or_404(message_id)
         
-        # Verify user is participant and not the sender
-        participant = ConversationParticipants.query.filter_by(
-            conversation_id=message.conversation_id,
-            user_id=user.user_id,
-            is_active=True
-        ).first()
+#         # Verify user is participant and not the sender
+#         participant = ConversationParticipants.query.filter_by(
+#             conversation_id=message.conversation_id,
+#             user_id=user.user_id,
+#             is_active=True
+#         ).first()
         
-        if not participant or message.sender_user_id == user.user_id:
-            abort(403, description="Cannot mark this message as read")
+#         if not participant or message.sender_user_id == user.user_id:
+#             abort(403, description="Cannot mark this message as read")
         
-        # Mark as read
-        message.is_read = True
-        message.read_at = datetime.utcnow()
+#         # Mark as read
+#         message.is_read = True
+#         message.read_at = datetime.utcnow()
         
-        # Update participant's last_read_at
-        participant.last_read_at = datetime.utcnow()
+#         # Update participant's last_read_at
+#         participant.last_read_at = datetime.utcnow()
         
-        db.session.commit()
-        return message
+#         db.session.commit()
+#         return message
 
+@messaging_blp.route("/conversations/<int:conversation_id>/read")
+class MarkConversationRead(MethodView):
+    @jwt_required()
+    def put(self, conversation_id):
+        user = _current_user()
+
+        messages = Messages.query.filter(
+            Messages.conversation_id == conversation_id,
+            Messages.sender_user_id != user.user_id,
+            Messages.is_read == False
+        ).all()
+
+        for msg in messages:
+            msg.is_read = True
+            msg.read_at = datetime.utcnow()
+
+        participant = ConversationParticipants.query.filter_by(
+            conversation_id=conversation_id,
+            user_id=user.user_id
+        ).first()
+
+        if participant:
+            participant.last_read_at = datetime.utcnow()
+
+        db.session.commit()
+
+        return {"message": "Conversation marked as read"}, 200
 @messaging_blp.route("/users/online")
 class OnlineUsersList(MethodView):
     @jwt_required()
