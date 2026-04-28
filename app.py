@@ -28,16 +28,30 @@ ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
 
 ##Set up config class 
 class Config:
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+
+    ########### THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
+    if os.environ.get('FLASK_ENV') == 'testing' or os.environ.get('TESTING') == 'True':
+        SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+        TESTING = True
+    else:
+        SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+        #Connection arguments
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "connect_args": {
+                "ssl_ca": ca_path,
+                "ssl_verify_cert": True
+            }
+        }
+    ############ THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     #Connection arguments
-    # SQLALCHEMY_ENGINE_OPTIONS = {
-    #     "connect_args": {
-    #         "ssl_ca": ca_path,
-    #         "ssl_verify_cert": True
-    #     }
-    # }
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {
+            "ssl_ca": ca_path,
+            "ssl_verify_cert": True
+        }
+    }
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
