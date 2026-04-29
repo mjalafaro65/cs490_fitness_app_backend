@@ -136,7 +136,7 @@ from marshmallow import Schema, fields, validate
 
 class WorkoutLogEntrySchema(Schema):
     workout_log_entry_id= fields.Int(dump_only=True)
-    calendar_workout_id = fields.Int(required=True)
+    calendar_workout_id = fields.Int(allow_none=True)
     plan_day_exercise_id = fields.Int(allow_none=True)
     exercise_id = fields.Int(required=True)
 
@@ -145,6 +145,7 @@ class WorkoutLogEntrySchema(Schema):
     weight = fields.Float(allow_none=True)
     rpe = fields.Float(allow_none=True)
     distance = fields.Float(allow_none=True)
+    calories = fields.Float(allow_none=True)
     duration_minutes = fields.Float(allow_none=True)
     notes = fields.Str(allow_none=True)
 
@@ -152,6 +153,7 @@ class WorkoutLogSchema(Schema):
     workout_log_id = fields.Int(dump_only=True)
     user_id =fields.Int(allow_none=True)
     calendar_workout_id = fields.Int(allow_none=True)
+    logged_at = fields.DateTime(dump_only=True)
     notes = fields.Str()
 
     entries = fields.List(fields.Nested(WorkoutLogEntrySchema))

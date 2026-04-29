@@ -1243,8 +1243,8 @@ class MyWorkoutLogs(MethodView):
 
         query = (
             db.session.query(WorkoutLogs)
-            .join(CalendarWorkouts,
-                  WorkoutLogs.calendar_workout_id == CalendarWorkouts.calendar_workout_id)
+            .outerjoin(CalendarWorkouts,
+                      WorkoutLogs.calendar_workout_id == CalendarWorkouts.calendar_workout_id)
             .filter(WorkoutLogs.user_id == target_user_id)
         )
 
@@ -1273,15 +1273,19 @@ class MyWorkoutLogs(MethodView):
             abort(404)
 
         # create or reuse log for this  session
-        log = WorkoutLogs.query.filter_by(
-            user_id=user.user_id,
-            calendar_workout_id=data["calendar_workout_id"]
-        ).first()
+        if data.get("calendar_workout_id"):
+            log = WorkoutLogs.query.filter_by(
+                user_id=user.user_id,
+                calendar_workout_id=data["calendar_workout_id"]
+            ).first()
+        else:
+            # For general activity logging, create a new log without calendar_workout_id
+            log = None
 
         if not log:
             log = WorkoutLogs(
                 user_id=user.user_id,
-                calendar_workout_id=data["calendar_workout_id"],
+                calendar_workout_id=data.get("calendar_workout_id"),
                 notes=data.get("notes")
             )
             db.session.add(log)
@@ -1295,6 +1299,7 @@ class MyWorkoutLogs(MethodView):
             weight=data.get("weight"),
             rpe=data.get("rpe"),
             distance=data.get("distance"),
+            calories=data.get("calories"),
             duration_minutes=data.get("duration_minutes"),
             notes=data.get("notes")
         )
