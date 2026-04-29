@@ -983,7 +983,8 @@ class ClientCoachList(MethodView):
                 Users.first_name, 
                 Users.last_name, 
                 Specialties.name.label("specialty_name"), 
-                CoachClientRelationships.started_at
+                CoachClientRelationships.started_at,
+                CoachClientRelationships.coach_profile_id
             )
             .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
             .join(Users, CoachProfiles.user_id == Users.user_id)
@@ -1001,7 +1002,8 @@ class ClientCoachList(MethodView):
                     "relationship_id": r.relationship_id,
                     "coach_name": f"{r.first_name} {r.last_name}",
                     "specialty": r.specialty_name, 
-                    "started_at": r.started_at.isoformat()
+                    "started_at": r.started_at.isoformat(),
+                    "coach_profile_id": r.coach_profile_id
                 } for r in results
             ]
         }
