@@ -16,6 +16,21 @@ nutrition_bp = Blueprint('Nutrition', __name__, url_prefix="/nutrition", descrip
 @nutrition_bp.route('/mealplans')
 class MealPlanList(MethodView):
     @jwt_required()
+    
+    @nutrition_bp.response(200, CreateMealplanSchema(many=True))
+    def get(self):
+        """
+        Get all meal plans for the current user
+        """
+        user_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=user_id).first()
+        if not user:
+            return {"message": "User not found"}, 404
+
+        meal_plans = MealPlans.query.filter_by(owner_user_id=user.user_id).all()
+        return meal_plans
+   
+    @jwt_required()
    
     @nutrition_bp.arguments(CreateMealplanSchema)
     @nutrition_bp.response(201, CreateMealplanSchema)
