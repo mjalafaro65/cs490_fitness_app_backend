@@ -35,13 +35,13 @@ class Config:
         TESTING = True
     else:
         SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
-        #Connection arguments
-        # SQLALCHEMY_ENGINE_OPTIONS = {
-        #     "connect_args": {
-        #         "ssl_ca": ca_path,
-        #         "ssl_verify_cert": True
-        #     }
-        # }
+        # Connection arguments
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "connect_args": {
+                "ssl_ca": ca_path,
+                "ssl_verify_cert": True
+            }
+        }
     ############ THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
