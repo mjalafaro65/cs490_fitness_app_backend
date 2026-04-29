@@ -23,6 +23,7 @@ from marshmallow import Schema, fields, validate
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 from models import CoachProfiles, CoachDocuments
 from db import db
+from models.payment_plans import BillTypeEnum
 
 #done automatically using model
 
@@ -63,7 +64,7 @@ class CoachProfileQuerySchema(Schema):
     coach_profile_id = fields.Int(required=False)
 
 class CoachDocumentSchema(Schema):
-    document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'ID', 'Other']))
+    document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'Identification', 'License ', 'Other']))
     document_url = fields.Str(required=True)
     
     # These are for the Database/Response only
@@ -290,5 +291,34 @@ class CoachAvailabilitySchema(Schema):
     coach_profile_id = fields.Int(dump_only=True)
 
     day_of_week = fields.Int(required=True)
-    start_time = fields.Time(required=True)  
-    end_time = fields.Time(required=True)
+    start_time = fields.Str(required=True)
+    end_time = fields.Str(required=True)
+
+class PaymentPlanSchema(Schema):
+    payment_plan_id = fields.Int(dump_only=True)
+    coach_profile_id = fields.Int(dump_only=True)
+
+    name = fields.Str(required=True)
+
+    billing_type = fields.Method(
+        serialize="get_billing_type",
+        deserialize="load_billing_type"
+    )
+
+    amount = fields.Decimal(as_string=True, required=True)
+
+    is_active = fields.Bool()
+    is_custom = fields.Bool()
+
+    created_at = fields.DateTime(dump_only=True)
+
+    # ---------- ENUM HANDLING ----------
+    def get_billing_type(self, obj):
+        # returns "onetime" or "recurring"
+        return obj.billing_type.value if obj.billing_type else None
+
+    def load_billing_type(self, value):
+        try:
+            return BillTypeEnum(value)
+        except ValueError:
+            raise ValueError("billing_type must be 'onetime' or 'recurring'")

@@ -141,4 +141,10 @@ class Users(db.Model):
         back_populates="user"
     )
     
-    
+    roles = db.relationship(
+        "Roles",
+        secondary="user_roles",
+        primaryjoin="Users.auth_id == UserRoles.user_id",
+        secondaryjoin="Roles.role_id == UserRoles.role_id",
+        backref="users"
+    )    
