@@ -871,7 +871,7 @@ class PayInvoice(MethodView):
             invoice_id=invoice.invoice_id,
             payer_user_id=client_user.user_id,
             amount=invoice.subtotal,
-            status="completed",
+            status="succeeded",
             is_auto_pay=False,
             provider=selected_card.provider, 
             provider_ref=selected_card.token, 
