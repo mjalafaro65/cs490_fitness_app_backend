@@ -613,11 +613,11 @@ class PlanItem(MethodView):
     @workout_blp.response(200)
     def delete(self, plan_id):
         """Delete entire workout plan (soft delete)."""
-        user_id = get_jwt_identity()
+        user = _current_user()
         plan = WorkoutPlans.query.get(plan_id)
         if not plan:
             abort(404, description="Plan not found.")
-        if not _plan_writable(plan, user_id):
+        if not _plan_writable(plan, user.user_id):
             abort(403, description="Not allowed.")
         
         # Soft delete
