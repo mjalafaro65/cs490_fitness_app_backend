@@ -32,7 +32,7 @@ from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, C
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema, PaymentPlanSchema
 from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
@@ -45,6 +45,7 @@ from datetime import datetime, timezone
 from .conversation_services import create_conversation
 from models.refund_disputes import StatusEnum_Disputes
 from models.payments import StatusEnum_Payments
+from models.payment_plans import BillTypeEnum
 
 
 
@@ -301,6 +302,7 @@ class CoachProfileView(MethodView):
 
         #look at role
         is_admin = db.session.query(UserRoles).join(Roles).filter(
+                
                 UserRoles.user_id == curr_auth_id,
                 Roles.name == 'admin'
         ).first() is not None
@@ -337,12 +339,29 @@ class CoachProfileView(MethodView):
                 current_status_upper = profile.status.lower()
                 new_val = value.lower() if isinstance(value, str) else value
                 if is_admin:
+                    
                     setattr(profile, key, value)
                     
                     if new_val == ApprovalStatusEnum.approved:
+                        ##so coach can start from client view
+                        setattr(profile, key, ApprovalStatusEnum.switched)   
                         profile.approved_at = datetime.utcnow()
                         profile.approved_by_admin_user_id = curr_user_id
                         
+                        user = Users.query.filter_by(user_id=profile.user_id).first()
+                        existing = UserRoles.query.filter_by(
+                            user_id=user.auth_id,
+                            role_id=2
+                        ).first()
+
+                        if not existing:
+                            new_role = UserRoles(
+                                user_id=user.auth_id,
+                                role_id=2
+                            )
+                            db.session.add(new_role)
+                            
+                            
                         create_notification(
                             user_id=profile.user_id,
                             type_slug="admin-approval",
@@ -633,7 +652,7 @@ class CoachAvailabilityView(MethodView):
         """
         Coach sets their availability
         """
-        curr_auth_id = 20
+        curr_auth_id = get_jwt_identity()
 
         user = Users.query.filter_by(auth_id=curr_auth_id).first()
         if not user:
@@ -644,13 +663,17 @@ class CoachAvailabilityView(MethodView):
             abort(404, description="Coach profile not found")
 
         day_of_week = data["day_of_week"]
-        start_time = data["start_time"]
-        end_time = data["end_time"]
+        start_time = datetime.strptime(data["start_time"], "%H:%M").time()
+        end_time = datetime.strptime(data["end_time"], "%H:%M").time()
+       
 
         if start_time >= end_time:
+            print("after if end >= time")
             abort(400, description="Start time must be before end time")
 
         if day_of_week < 0 or day_of_week > 6:
+            print("after dayof week if ")
+
             abort(400, description="day_of_week must be 0–6")
         
         
@@ -665,7 +688,7 @@ class CoachAvailabilityView(MethodView):
             )
         ).first()
         if overlap:
-            abort(400, description="Time slot overlaps with existing availability")
+            return {"message": "Time slot overlaps with existing availability"}, 400
 
         availability = CoachAvailability(
             coach_profile_id=coach.coach_profile_id,
@@ -682,16 +705,33 @@ class CoachAvailabilityView(MethodView):
 
     @jwt_required()
     @coach_blp.response(200, CoachAvailabilitySchema(many=True))
-    def get(self):
+    def get(self, ):
         curr_auth_id =get_jwt_identity()
+        
 
         user = Users.query.filter_by(auth_id=curr_auth_id).first()
+        
+        coach_profile_id = request.args.get("coach_profile_id")
         if not user:
             abort(401, description="User not found")
 
-        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
-        if not coach:
-            abort(404, description="Coach profile not found")
+        if coach_profile_id:
+            coach = CoachProfiles.query.filter_by(
+                coach_profile_id=coach_profile_id
+            ).first()
+
+            if not coach:
+                abort(404, description="Coach profile not found")
+
+            # case 2: own profile (no param)
+        else:
+            coach = CoachProfiles.query.filter_by(
+                user_id=user.user_id
+            ).first()
+
+            if not coach:
+                abort(404, description="Coach profile not found")
+      
 
         availability = CoachAvailability.query.filter_by(
             coach_profile_id=coach.coach_profile_id
@@ -1130,7 +1170,138 @@ class CoachAcceptHireRequest(MethodView):
             "invoice_id": new_invoice.invoice_id
         }
     
+    
+    @coach_blp.route("/payment-plans")
+    class CoachPaymentPlanCreateView(MethodView):
 
+        @jwt_required()
+        def post(self):
+            auth_id = get_jwt_identity()
+
+            user = Users.query.filter_by(auth_id=auth_id).first()
+            if not user:
+                abort(401, description="User not found")
+
+            coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+            if not coach:
+                abort(404, description="Coach profile not found")
+
+            data = request.get_json()
+
+            # validate billing type (IMPORTANT because you're using Enum)
+            try:
+                billing_type = BillTypeEnum[data.get("billing_type")]
+            except (KeyError, TypeError):
+                abort(400, description="Invalid billing_type. Use 'onetime' or 'recurring'")
+            plan = PaymentPlans(
+                coach_profile_id=coach.coach_profile_id,
+                name=data.get("name"),
+                amount=data.get("amount"),
+                billing_type=billing_type,
+                is_active=True,
+                is_custom=data.get("is_custom", False)
+        )
+            db.session.add(plan)
+            db.session.commit()
+
+            return {"message": "Plan created"}, 201
+
+@coach_blp.route("/payment-plans/<int:plan_id>")
+class CoachPaymentPlanUpdateView(MethodView):
+
+    @jwt_required()
+    def patch(self, plan_id):
+        auth_id = get_jwt_identity()
+
+        user = Users.query.filter_by(auth_id=auth_id).first()
+        if not user:
+            abort(401, description="User not found")
+
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+        if not coach:
+            abort(404, description="Coach profile not found")
+
+        plan = PaymentPlans.query.filter_by(
+            payment_plan_id=plan_id,
+            coach_profile_id=coach.coach_profile_id
+        ).first()
+
+        if not plan:
+            abort(404, description="Payment plan not found")
+
+        data = request.get_json()
+
+        plan.name = data.get("name", plan.name)
+        plan.amount = data.get("amount", plan.amount)
+        plan.billing_type = data.get("billing_type", plan.billing_type)
+        plan.is_active = data.get("is_active", plan.is_active)
+        plan.is_custom = data.get("is_custom", plan.is_custom)
+
+        db.session.commit()
+
+        return PaymentPlanSchema().dump(plan), 200
+
+    @jwt_required()
+    def patch(self, plan_id):
+        auth_id = get_jwt_identity()
+
+        user = Users.query.filter_by(auth_id=auth_id).first()
+        if not user:
+            abort(401, description="User not found")
+
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+        if not coach:
+            abort(404, description="Coach profile not found")
+
+        plan = PaymentPlans.query.filter_by(
+            payment_plan_id=plan_id,
+            coach_profile_id=coach.coach_profile_id
+        ).first()
+
+        if not plan:
+            abort(404, description="Payment plan not found")
+
+        data = request.get_json()
+
+        plan.name = data.get("name", plan.name)
+        plan.amount = data.get("amount", plan.amount)
+        plan.billing_type = data.get("billing_type", plan.billing_type)
+        plan.is_active = data.get("is_active", plan.is_active)
+        plan.is_custom = data.get("is_custom", plan.is_custom)
+
+        db.session.commit()
+
+        return PaymentPlanSchema().dump(plan), 200
+    
+
+@coach_blp.route("/payment-plans/<int:plan_id>")
+class CoachPaymentPlanDeleteView(MethodView):
+
+    @jwt_required()
+    def delete(self, plan_id):
+        auth_id = get_jwt_identity()
+
+        user = Users.query.filter_by(auth_id=auth_id).first()
+        if not user:
+            abort(401, description="User not found")
+
+        coach = CoachProfiles.query.filter_by(user_id=user.user_id).first()
+        if not coach:
+            abort(404, description="Coach profile not found")
+
+        plan = PaymentPlans.query.filter_by(
+            payment_plan_id=plan_id,
+            coach_profile_id=coach.coach_profile_id
+        ).first()
+
+        if not plan:
+            abort(404, description="Payment plan not found")
+
+        db.session.delete(plan)
+        db.session.commit()
+
+        return {"message": "Payment plan deleted"}, 200
+    
 @coach_blp.route("/hire-request/<int:request_id>/deny")
 class CoachDenyHireRequest(MethodView):
     @jwt_required()

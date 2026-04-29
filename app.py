@@ -35,7 +35,7 @@ class Config:
         TESTING = True
     else:
         SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
-        #Connection arguments
+        # Connection arguments
         SQLALCHEMY_ENGINE_OPTIONS = {
             "connect_args": {
                 "ssl_ca": ca_path,
