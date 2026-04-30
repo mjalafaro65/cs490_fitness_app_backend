@@ -78,6 +78,7 @@ class TopCoach(MethodView):
             select(
                 Users.user_id,
                 Users.first_name,
+                CoachProfiles.coach_profile_id,
                 Users.last_name,
                func.max(CoachProfiles.bio).label("bio"),
         func.max(CoachProfiles.profile_photo).label("profile_photo"),
@@ -115,6 +116,7 @@ class TopCoach(MethodView):
                 {
                     "user_id": row.user_id,
                     "name": f"{row.first_name} {row.last_name}",
+                    "coach_profile_id":row.coach_profile_id,
                     "specialty": row.specialty_name,
                     "bio": row.bio,
                     "image": row.profile_photo,

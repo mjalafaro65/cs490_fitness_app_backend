@@ -273,6 +273,7 @@ class EditDailyView(MethodView):
 class ClientPaymentPlanListView(MethodView):
     @client_blp.response(200, PaymentPlanSchema(many=True))
     def get(self,coach_profile_id):
+        print(coach_profile_id)
         profile = CoachProfiles.query.get_or_404(coach_profile_id)
          
         plans = PaymentPlans.query.join(
@@ -285,8 +286,8 @@ class ClientPaymentPlanListView(MethodView):
         ).all()
 
         # Check if the list is empty
-        if not plans:
-            abort(404, description="No active payment plans found.")
+        # if not plans:
+        #     abort(404, description="No active payment plans found.")
             
         return plans
 
