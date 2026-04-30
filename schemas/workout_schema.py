@@ -168,7 +168,16 @@ class WorkoutLogQuerySchema(Schema):
 
 class CalendarWorkoutQuerySchema(Schema):
     date = fields.Date(required=False)
-    view = fields.Str(required=False) 
+    view = fields.Str(required=False)
+
+
+class CalendarWorkoutUpdateSchema(Schema):
+    scheduled_start = fields.DateTime(required=False)
+    scheduled_end = fields.DateTime(required=False)
+    status = fields.Str(
+        required=False,
+        validate=validate.OneOf(["scheduled", "completed", "skipped", "canceled"])
+    ) 
 
 
 class ExerciseSchema(SQLAlchemyAutoSchema):

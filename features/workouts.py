@@ -7,6 +7,7 @@ from flask.views import MethodView
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_smorest import Blueprint, abort
 from sqlalchemy import and_, func, or_
+from collections import defaultdict
 from flask import request
 
 from middleware import roles_required
@@ -39,6 +40,7 @@ from models.workout_plan_assignments import (
 )
 from schemas.workout_schema import (
     CalendarOccurrenceSchema,
+    CalendarWorkoutUpdateSchema,
     DayExerciseCreateSchema,
     DayExerciseUpdateSchema,
     ExerciseCreateSchema,
@@ -100,7 +102,15 @@ def _exercise_visible_to_user(ex: Exercises, user_id: int) -> bool:
 def _plan_readable(plan: WorkoutPlans, user_id: int) -> bool:
     if plan.owner_user_id == user_id:
         return True
-    return bool(plan.is_public)
+    if plan.is_public:
+        return True
+    # Allow if assigned to this user by a coach
+    assignment = WorkoutPlanAssignments.query.filter_by(
+        plan_id=plan.plan_id,
+        assigned_to_user_id=user_id,
+        status=AssignmentStatusEnum.active
+    ).first()
+    return assignment is not None
 
 
 def _plan_writable(plan: WorkoutPlans, user_id: int) -> bool:
@@ -441,8 +451,21 @@ class MyPlans(MethodView):
             .order_by(WorkoutPlans.updated_at.desc())
             .all()
         )
+        assignments = WorkoutPlanAssignments.query.filter_by(
+            assigned_to_user_id=user.user_id,
+            status=AssignmentStatusEnum.active
+        ).all()
+        assigned_plan_ids = {a.plan_id for a in assignments}
+        
+        assigned = WorkoutPlans.query.filter(
+            WorkoutPlans.plan_id.in_(assigned_plan_ids),
+            WorkoutPlans.is_active == True,
+            WorkoutPlans.owner_user_id != user.user_id  # avoid duplicates
+        ).all()
+        
+        all_plans = plans + assigned
         return {
-            "plans": [_serialize_plan(p, user.user_id, detail=False) for p in plans]
+            "plans": [_serialize_plan(p, user.user_id, detail=False) for p in all_plans]
         }
 
 
@@ -751,8 +774,111 @@ class PlanDayItem(MethodView):
             db.session.rollback()
             abort(500, description=str(e))
         return {"message": "Day removed."}
+    
+    
+def _exercise_usable(ex: Exercises, user_id: int) -> bool:
+    return _exercise_visible_to_user(ex, user_id)
+
+from datetime import timedelta, datetime
+
+# def _generate_calendar_from_assignment(assignment: WorkoutPlanAssignments):
+#     plan = WorkoutPlans.query.get(assignment.plan_id)
+#     if not plan:
+#         return
+
+#     days = (
+#         WorkoutPlanDays.query
+#         .filter_by(plan_id=plan.plan_id)
+#         .order_by(WorkoutPlanDays.sort_order)
+#         .all()
+#     )
+
+#     start_date = assignment.start_date or datetime.utcnow().date()
+#     end_date = assignment.end_date
+
+#     repeat = assignment.repeat_rule.value if assignment.repeat_rule else "weekly"
+
+#     # map plan days in order
+#     day_index = 0
+
+#     current_date = start_date
+#     created = []
+
+#     while True:
+#         if end_date and current_date > end_date:
+#             break
+        
+#         if not end_date:
+#             break  
+
+#         for _ in range(len(days)):
+#             if end_date and current_date > end_date:
+#                 break
+
+#             plan_day = days[day_index % len(days)]
+
+          
+
+#             existing = CalendarWorkouts.query.filter_by(
+#                 for_user_id=assignment.assigned_to_user_id,
+#                 plan_day_id=plan_day.plan_day_id,
+#                 scheduled_start=datetime.combine(current_date, datetime.min.time())
+#             ).first()
+
+#             if existing:
+#                 continue
+            
+#               # create calendar workout
+#             cw = CalendarWorkouts(
+#                 for_user_id=assignment.assigned_to_user_id,
+#                 plan_day_id=plan_day.plan_day_id,
+#                 coach_id=assignment.assigned_by_user_id,
+#                 scheduled_start=datetime.combine(current_date, datetime.min.time()),
+#                 scheduled_end=datetime.combine(current_date, datetime.min.time()) + timedelta(hours=1),
+#                 status="scheduled",
+                
+#             )
+#             db.session.add(cw)
+#             created.append(cw)
 
 
+#             day_index += 1
+            
+#             for i in range(0, 30):  # or until end_date
+#                 current_date = start_date + timedelta(days=i * 7)
+
+#     return created
+
+@workout_blp.route("/plans/<int:plan_id>/assignments")
+class PlanAssignmentList(MethodView):
+    @jwt_required()
+    @workout_blp.response(200)
+    def get(self, plan_id):
+        """Get all assignments for a plan (coach use)."""
+        user = _current_user()
+        plan = WorkoutPlans.query.filter_by(plan_id=plan_id, is_active=True).first()
+        if not plan or not _plan_writable(plan, user.user_id):
+            abort(403)
+
+        assignments = WorkoutPlanAssignments.query.filter_by(
+            plan_id=plan_id
+        ).all()
+
+        result = []
+        for a in assignments:
+            client = Users.query.get(a.assigned_to_user_id)
+            result.append({
+                "assignment_id": a.assignment_id,
+                "assigned_to_user_id": a.assigned_to_user_id,
+                "client_name": f"{client.first_name} {client.last_name}" if client else None,
+                "start_date": a.start_date.isoformat() if a.start_date else None,
+                "end_date": a.end_date.isoformat() if a.end_date else None,
+                "status": a.status.value if a.status else None,
+                "repeat_rule": a.repeat_rule.value if a.repeat_rule else None,
+            })
+
+        return {"assignments": result}
+    
 @workout_blp.route("/plans/<int:plan_id>/days/<int:day_id>/exercises")
 class PlanDayExercises(MethodView):
     @jwt_required()
@@ -808,8 +934,7 @@ class PlanDayExercises(MethodView):
         }
 
 
-def _exercise_usable(ex: Exercises, user_id: int) -> bool:
-    return _exercise_visible_to_user(ex, user_id)
+
 
 
 @workout_blp.route("/plans/<int:plan_id>/days/<int:day_id>/exercises/<int:de_id>")
@@ -909,22 +1034,48 @@ class PlanAssignments(MethodView):
         if not plan or not _plan_readable(plan, user.user_id):
             abort(404, description="Plan not found.")
         repeat_raw = data.get("repeat_rule") or "weekly"
+        assigned_to_user_id = data.get("assigned_to_user_id") or user.user_id
+
+        if assigned_to_user_id != user.user_id:
+            coach_profile = CoachProfiles.query.filter_by(
+                user_id=user.user_id
+            ).first()
+
+            if not coach_profile:
+                abort(403, "Only coaches can assign to clients")
+
+            rel = CoachClientRelationships.query.filter_by(
+                coach_profile_id=coach_profile.coach_profile_id,
+                client_user_id=assigned_to_user_id,
+                status=status_enum.active
+            ).first()
+
+            if not rel:
+                abort(403, "Not your client")
+
+            assignment_type = AssignmentTypeEnum.coach
+        else:
+            assignment_type = AssignmentTypeEnum.self
+        
         try:
             repeat_rule = RepeatRuleEnum(repeat_raw)
         except ValueError:
             abort(400, description="Invalid repeat_rule.")
         row = WorkoutPlanAssignments(
             plan_id=plan.plan_id,
-            assigned_to_user_id=user.user_id,
+            assigned_to_user_id=assigned_to_user_id,
             assigned_by_user_id=user.user_id,
-            assignment_type=AssignmentTypeEnum.self,
+            assignment_type=assignment_type,
             start_date=data.get("start_date"),
             end_date=data.get("end_date"),
             repeat_rule=repeat_rule,
             status=AssignmentStatusEnum.active,
         )
         db.session.add(row)
+        db.session.flush() 
         try:
+            # _generate_calendar_from_assignment(row)
+
             db.session.commit()
         except Exception as e:
             db.session.rollback()
@@ -939,6 +1090,106 @@ class PlanAssignments(MethodView):
             "status": row.status.value if row.status else None,
         }
 
+
+@workout_blp.route("/plans/scheduled")
+class ScheduledPlans(MethodView):
+
+    @jwt_required()
+    def get(self):
+        user = _current_user()
+
+        # 1. Get all calendar workouts for user
+        workouts = (
+            CalendarWorkouts.query
+            .options(
+                db.joinedload(CalendarWorkouts.plan_day)
+                .joinedload(WorkoutPlanDays.plan)
+            )
+            .filter(CalendarWorkouts.for_user_id == user.user_id)
+            .order_by(CalendarWorkouts.scheduled_start.asc())
+            .all()
+        )
+
+        # 2. Group structure: plan -> day -> sessions
+        plans_map = defaultdict(lambda: {
+            "plan_id": None,
+            "plan_name": None,
+            "days": defaultdict(lambda: {
+                "plan_day_id": None,
+                "day_label": None,
+                "sessions": []
+            })
+        })
+
+        for w in workouts:
+            if not w.plan_day or not w.plan_day.plan:
+                continue
+
+            plan = w.plan_day.plan
+            day = w.plan_day
+
+            plan_entry = plans_map[plan.plan_id]
+            plan_entry["plan_id"] = plan.plan_id
+            plan_entry["plan_name"] = plan.name
+
+            day_entry = plan_entry["days"][day.plan_day_id]
+            day_entry["plan_day_id"] = day.plan_day_id
+            day_entry["day_label"] = day.day_label
+
+            day_entry["sessions"].append({
+                "calendar_workout_id": w.calendar_workout_id,
+                "scheduled_start": w.scheduled_start,
+                "scheduled_end": w.scheduled_end,
+                "status": w.status
+            })
+
+        # 3. Convert defaultdict → list
+        result = []
+
+        for plan in plans_map.values():
+            result.append({
+                "plan_id": plan["plan_id"],
+                "plan_name": plan["plan_name"],
+                "scheduled_days": list(plan["days"].values())
+            })
+
+        return result
+@workout_blp.route("/assignments/<int:assignment_id>/regenerate")
+class RegenerateAssignmentCalendar(MethodView):
+    @jwt_required()
+    def post(self, assignment_id):
+        user = _current_user()
+
+        assignment = WorkoutPlanAssignments.query.get(assignment_id)
+        if not assignment:
+            abort(404, "Assignment not found")
+
+        if assignment.assigned_to_user_id != user.user_id:
+            abort(403)
+
+        # delete old calendar workouts
+        # CalendarWorkouts.query.filter_by(
+        #     for_user_id=user.user_id,
+        #     plan_day_id=assignment.plan_id
+        # ).delete()
+        # CalendarWorkouts.query.filter_by(
+        #     for_user_id=user.user_id
+        # ).join(CalendarWorkouts.plan_day).filter(
+        #     WorkoutPlanDays.plan_id == assignment.plan_id
+        # ).delete(synchronize_session=False)
+        
+        CalendarWorkouts.query.filter_by(
+            for_user_id=user.user_id
+        ).join(CalendarWorkouts.plan_day).filter(
+            WorkoutPlanDays.plan_id == assignment.plan_id
+        ).delete(synchronize_session=False)
+
+        db.session.commit()
+
+        _generate_calendar_from_assignment(assignment)
+        db.session.commit()
+
+        return {"message": "calendar regenerated"}
 
 @workout_blp.route("/plans/<int:plan_id>/calendar")
 class PlanCalendar(MethodView):
@@ -999,6 +1250,7 @@ class CalendarWorkoutsList(MethodView):
         user = _current_user()
 
         view = args.get("view")
+        
 
         query = (
             CalendarWorkouts.query
@@ -1023,9 +1275,22 @@ class CalendarWorkoutsList(MethodView):
                 CalendarWorkouts.scheduled_start < end
             )
 
-        workouts = query.order_by(
-            CalendarWorkouts.scheduled_start.asc()
-        ).all()
+      
+        if args.get("plan_day_id"):
+            query = query.filter(CalendarWorkouts.plan_day_id == args["plan_day_id"])
+
+        if args.get("status"):
+            query = query.filter(CalendarWorkouts.status == args["status"])
+
+        if args.get("plan_id"):
+            query = query.join(CalendarWorkouts.plan_day).filter(
+                WorkoutPlanDays.plan_id == args["plan_id"]
+            )
+            
+        
+        
+        workouts = query.order_by(CalendarWorkouts.scheduled_start.asc()).all()
+
 
         return [
             {
@@ -1085,13 +1350,49 @@ class CalendarWorkoutDetail(MethodView):
 
             "exercises": exercises
         }
+    @jwt_required()
+    @workout_blp.arguments(CalendarWorkoutUpdateSchema)
+    @workout_blp.response(200)
+    def patch(self, data, calendar_workout_id):
+        user = _current_user()
+
+        w = CalendarWorkouts.query.filter_by(
+            calendar_workout_id=calendar_workout_id,
+            for_user_id=user.user_id
+        ).first()
+
+        if not w:
+            abort(404)
+
+        
+        if "scheduled_start" in data and "scheduled_end" in data:
+            if data["scheduled_end"] <= data["scheduled_start"]:
+                abort(400, "End must be after start")
+        if not w:
+            abort(404, description="Calendar workout not found")
+
+        if "status" in data and data["status"] is not None:
+            w.status = data["status"]
+
+        if "scheduled_start" in data:
+            w.scheduled_start = data["scheduled_start"]
+
+        if "scheduled_end" in data:
+            w.scheduled_end = data["scheduled_end"]
+
+        db.session.commit()
+
+        return {
+            "calendar_workout_id": w.calendar_workout_id,
+            "status": w.status
+        }
 
 
 from datetime import datetime, timedelta
 
 
 @workout_blp.route("/calendar-workouts-view")
-class CalendarWorkoutsList(MethodView):
+class CalendarWorkoutsList2(MethodView):
     """
         Works for self and coach,
         if not date(ex- 2026-04-18) -or today,
