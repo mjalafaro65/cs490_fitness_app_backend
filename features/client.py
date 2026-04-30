@@ -287,8 +287,7 @@ class ClientPaymentPlanListView(MethodView):
         # Check if the list is empty
         if not plans:
             abort(404, description="No active payment plans found.")
-
-
+            
         return plans
 
 

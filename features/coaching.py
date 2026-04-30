@@ -54,6 +54,12 @@ from schemas.coach_schema import CoachProfileSchema
 
 coach_blp = Blueprint("Coach", __name__, url_prefix="/coach", description="Coach feat")
 
+"""
+Searches for the top 3 coaches based on average ratings and total reviews
+Filters for approved coaches only.
+Returns Coach details
+"""
+
 @coach_blp.route("/top-coach")
 class TopCoach(MethodView):
     def get(self):
