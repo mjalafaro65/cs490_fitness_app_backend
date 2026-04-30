@@ -76,7 +76,7 @@ class ReviewCoachSchema(Schema):
     review_id = fields.Int(dump_only=True)
     coach_profile_id = fields.Int(dump_only=True)
     ### For creating reviews
-    rating = fields.Int(required=True, validate=validate.Range(min=1, max=100))
+    rating = fields.Int(required=True, validate=validate.Range(min=1, max=5))
     comment = fields.Str(validate=validate.Length(max=1000))
     helpful_count = fields.Int(dump_only=True)
     unhelpful_count = fields.Int(dump_only=True)

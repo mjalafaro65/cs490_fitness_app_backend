@@ -471,11 +471,19 @@ class ReviewCoachView(MethodView):
         if not coach:
             abort(404, description="Coach profile not found.")
 
+        # TEMPORARILY DISABLED: Check if client has a relationship with the coach (active or terminated)
+        # relationship = CoachClientRelationships.query.filter_by(
+        #     coach_profile_id=coach_id,
+        #     client_user_id=user.user_id
+        # ).first()
+
+        # if not relationship:
+        #     abort(403, description="You can only review coaches you have hired or previously worked with.")
+
         existing_review = CoachReviews.query.filter_by(
             coach_profile_id=coach_id,
             client_user_id=user.user_id
         ).first()
-        print(existing_review)
 
         if existing_review:
             abort(400, description="You have already submitted a review for this coach.")
@@ -493,7 +501,8 @@ class ReviewCoachView(MethodView):
             return review
         except Exception as e:
             db.session.rollback()
-            abort(500, description=f"Database error: {str(e)}")
+            print(f"Database error in review submission: {str(e)}")
+            abort(500, description="Failed to submit review. Please try again.")
 
 ### Manage Personal Reviews
 @client_blp.route("/my-reviews")
