@@ -40,6 +40,7 @@ from models.workout_plan_assignments import (
     RepeatRuleEnum,
     
 )
+
 from schemas.workout_schema import (
     CalendarOccurrenceSchema,
     CalendarWorkoutUpdateSchema,
@@ -61,7 +62,8 @@ from schemas.workout_schema import (
     WorkoutLogQuerySchema,
     CalendarWorkoutQuerySchema,
     CalendarViewSchema,
-    CalendarWorkoutQuerySchemaWeek
+    CalendarWorkoutQuerySchemaWeek,
+    AssignmentStatusUpdateSchema
 )
 
 workout_blp = Blueprint(
@@ -453,20 +455,20 @@ class MyPlans(MethodView):
             .order_by(WorkoutPlans.updated_at.desc())
             .all()
         )
-        # assignments = WorkoutPlanAssignments.query.filter_by(
-        #     assigned_to_user_id=user.user_id,
-        #     status=AssignmentStatusEnum.active
-        # ).all()
-        # assigned_plan_ids = {a.plan_id for a in assignments}
+        assignments = WorkoutPlanAssignments.query.filter_by(
+            assigned_to_user_id=user.user_id,
+            status=AssignmentStatusEnum.active
+        ).all()
+        assigned_plan_ids = {a.plan_id for a in assignments}
         
-        # assigned = WorkoutPlans.query.filter(
-        #     WorkoutPlans.plan_id.in_(assigned_plan_ids),
-        #     WorkoutPlans.is_active == True,
-        #     WorkoutPlans.owner_user_id != user.user_id  # avoid duplicates
-        # ).all()
+        assigned = WorkoutPlans.query.filter(
+            WorkoutPlans.plan_id.in_(assigned_plan_ids),
+            WorkoutPlans.is_active == True,
+            WorkoutPlans.owner_user_id != user.user_id  # avoid duplicates
+        ).all()
         
-        # all_plans = plans + assigned
-        all_plans = plans   
+        all_plans = plans + assigned
+        # all_plans = plans   
         return {
             "plans": [_serialize_plan(p, user.user_id, detail=False) for p in all_plans]
         }
@@ -1034,9 +1036,11 @@ class PlanAssignments(MethodView):
             WorkoutPlans.plan_id == plan_id,
             WorkoutPlans.is_active == True
         ).first()
+        
         if not plan or not _plan_readable(plan, user.user_id):
             abort(404, description="Plan not found.")
-        repeat_raw = data.get("repeat_rule") or "weekly"
+            
+        repeat_raw = data.get("repeat_rule") or "none"
         assigned_to_user_id = data.get("assigned_to_user_id") or user.user_id
 
         if assigned_to_user_id != user.user_id:
@@ -1332,6 +1336,11 @@ class CalendarWorkoutsList(MethodView):
             )
             .filter(CalendarWorkouts.for_user_id == user.user_id)
         )
+        
+        query = query.filter(
+            CalendarWorkouts.status != "canceled"
+        )
+
 
 
         if view == "week":
@@ -1413,7 +1422,10 @@ class CalendarWorkoutDetail(MethodView):
         """
         detailed calendar workouts not exercise list 
         """
-        w = CalendarWorkouts.query.get(calendar_workout_id)
+        w = CalendarWorkouts.query.filter(
+            CalendarWorkouts.calendar_workout_id == calendar_workout_id,
+            CalendarWorkouts.status != "canceled"
+        ).first()
         if not w:
             abort(404)
 
@@ -1451,45 +1463,77 @@ class CalendarWorkoutDetail(MethodView):
 
             "exercises": exercises
         }
-    @jwt_required()
-    @workout_blp.arguments(CalendarWorkoutUpdateSchema)
-    @workout_blp.response(200)
-    def patch(self, data, calendar_workout_id):
-        user = _current_user()
+    # @jwt_required()
+    # @workout_blp.arguments(CalendarWorkoutUpdateSchema)
+    # @workout_blp.response(200)
+    # def patch(self, data, calendar_workout_id):
+    #     user = _current_user()
 
-        w = CalendarWorkouts.query.filter_by(
-            calendar_workout_id=calendar_workout_id,
-            for_user_id=user.user_id
-        ).first()
+    #     w = CalendarWorkouts.query.filter_by(
+    #         calendar_workout_id=calendar_workout_id,
+    #         for_user_id=user.user_id
+    #     ).first()
 
-        if not w:
-            abort(404)
+    #     if not w:
+    #         abort(404)
 
         
-        if "scheduled_start" in data and "scheduled_end" in data:
-            if data["scheduled_end"] <= data["scheduled_start"]:
-                abort(400, "End must be after start")
-        if not w:
-            abort(404, description="Calendar workout not found")
+    #     if "scheduled_start" in data and "scheduled_end" in data:
+    #         if data["scheduled_end"] <= data["scheduled_start"]:
+    #             abort(400, "End must be after start")
+    #     if not w:
+    #         abort(404, description="Calendar workout not found")
 
-        if "status" in data and data["status"] is not None:
-            w.status = data["status"]
+    #     if "status" in data and data["status"] is not None:
+    #         w.status = data["status"]
 
-        if "scheduled_start" in data:
-            w.scheduled_start = data["scheduled_start"]
+    #     if "scheduled_start" in data:
+    #         w.scheduled_start = data["scheduled_start"]
 
-        if "scheduled_end" in data:
-            w.scheduled_end = data["scheduled_end"]
+    #     if "scheduled_end" in data:
+    #         w.scheduled_end = data["scheduled_end"]
 
+    #     db.session.commit()
+
+    #     return {
+    #         "calendar_workout_id": w.calendar_workout_id,
+    #         "status": w.status
+    #     }
+
+
+def check_assignment_completion(user_id, calendar_workout):
+    # get assignment for this workout via plan_day
+    day = WorkoutPlanDays.query.get(calendar_workout.plan_day_id)
+    if not day:
+        return
+
+    plan_id = day.plan_id
+
+    assignment = WorkoutPlanAssignments.query.filter_by(
+        assigned_to_user_id=user_id,
+        plan_id=plan_id
+    ).first()
+
+    if not assignment:
+        return
+
+    # get ALL workouts for this assignment
+    workouts = CalendarWorkouts.query.join(WorkoutPlanDays).filter(
+        WorkoutPlanDays.plan_id == plan_id,
+        CalendarWorkouts.for_user_id == user_id
+    ).all()
+
+    # check if any are NOT completed
+
+
+    # 2. ALL completed → complete assignment
+    if any(w.status == "scheduled" for w in workouts):
+        return
+
+    # 2. If ALL completed → complete assignment
+    if all(w.status == "completed" for w in workouts):
+        assignment.status = AssignmentStatusEnum.completed
         db.session.commit()
-
-        return {
-            "calendar_workout_id": w.calendar_workout_id,
-            "status": w.status
-        }
-
-
-from datetime import datetime, timedelta
 
 
 @workout_blp.route("/calendar-workouts-view")
@@ -1522,6 +1566,10 @@ class CalendarWorkoutsList2(MethodView):
             selectinload(CalendarWorkouts.plan_day)
                 .selectinload(WorkoutPlanDays.exercises)
                 .selectinload(WorkoutPlanDayExercises.exercise),
+        )
+        
+        query = query.filter(
+            CalendarWorkouts.status != "canceled"
         )
 
         # 2. DETERMINE IF COACH
@@ -1711,6 +1759,8 @@ class MyWorkoutLogs(MethodView):
 
         return {"message": "Logged"}
     
+    
+    
 
 @workout_blp.route("/workout-log-entries/<int:entry_id>")
 class WorkoutLogEntryResource(MethodView):
@@ -1766,4 +1816,103 @@ class WorkoutLogEntryResource(MethodView):
             "message": "Workout log entry deleted",
             "workout_log_entry_id": entry_id
         }
-    
+        
+        
+
+@workout_blp.route("/assignments/<int:assignment_id>")
+class AssignmentDetail(MethodView):
+
+    @jwt_required()
+    @workout_blp.arguments(AssignmentStatusUpdateSchema)
+    @workout_blp.response(200)
+    def patch(self, data, assignment_id):
+        user = _current_user()
+
+        assignment = WorkoutPlanAssignments.query.filter_by(
+            assignment_id=assignment_id
+        ).first()
+
+        if not assignment:
+            abort(404, description="Assignment not found")
+
+        # 🔐 Authorization
+        if assignment.assigned_to_user_id != user.user_id:
+            coach_profile = CoachProfiles.query.filter_by(
+                user_id=user.user_id
+            ).first()
+
+            if not coach_profile:
+                abort(403, "Not allowed")
+
+            rel = CoachClientRelationships.query.filter_by(
+                coach_profile_id=coach_profile.coach_profile_id,
+                client_user_id=assignment.assigned_to_user_id,
+                status=status_enum.active
+            ).first()
+
+            if not rel:
+                abort(403, "Not your client")
+
+        new_status = data.get("status")
+
+        # Validate enum
+        try:
+            assignment.status = AssignmentStatusEnum(new_status)
+        except ValueError:
+            abort(400, description="Invalid status")
+
+        db.session.commit()
+
+        return {
+            "assignment_id": assignment.assignment_id,
+            "status": assignment.status.value
+        }
+  
+@workout_blp.route("/calendar-workouts/<int:calendar_workout_id>")
+class CalendarWorkoutDetail(MethodView): 
+    @jwt_required()
+    @workout_blp.arguments(CalendarWorkoutUpdateSchema)
+    @workout_blp.response(200)
+    def patch(self, data, calendar_workout_id):
+        user = _current_user()
+
+        w = CalendarWorkouts.query.filter_by(
+            calendar_workout_id=calendar_workout_id,
+            for_user_id=user.user_id
+        ).first()
+
+        if not w:
+            abort(404, description="Workout not found")
+
+        # ⏱Validate time
+        if "scheduled_start" in data and "scheduled_end" in data:
+            if data["scheduled_end"] <= data["scheduled_start"]:
+                abort(400, "End must be after start")
+
+        # Update status
+        if "status" in data:
+            
+                w.status = data["status"]
+
+          
+
+        # Reschedule
+        if "scheduled_start" in data:
+            w.scheduled_start = data["scheduled_start"]
+
+        if "scheduled_end" in data:
+            w.scheduled_end = data["scheduled_end"]
+
+        check_assignment_completion(user.user_id, w)
+
+        db.session.commit()
+        print(w)
+        
+
+
+        return {
+            "calendar_workout_id": w.calendar_workout_id,
+            "status": w.status,
+            "scheduled_start": w.scheduled_start,
+            "scheduled_end": w.scheduled_end
+        }
