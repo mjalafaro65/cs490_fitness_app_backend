@@ -3,6 +3,8 @@ from sqlalchemy.orm import selectinload
 from datetime import datetime
 from decimal import Decimal
 
+from sqlalchemy.orm import joinedload
+
 from flask.views import MethodView
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_smorest import Blueprint, abort
@@ -451,19 +453,20 @@ class MyPlans(MethodView):
             .order_by(WorkoutPlans.updated_at.desc())
             .all()
         )
-        assignments = WorkoutPlanAssignments.query.filter_by(
-            assigned_to_user_id=user.user_id,
-            status=AssignmentStatusEnum.active
-        ).all()
-        assigned_plan_ids = {a.plan_id for a in assignments}
+        # assignments = WorkoutPlanAssignments.query.filter_by(
+        #     assigned_to_user_id=user.user_id,
+        #     status=AssignmentStatusEnum.active
+        # ).all()
+        # assigned_plan_ids = {a.plan_id for a in assignments}
         
-        assigned = WorkoutPlans.query.filter(
-            WorkoutPlans.plan_id.in_(assigned_plan_ids),
-            WorkoutPlans.is_active == True,
-            WorkoutPlans.owner_user_id != user.user_id  # avoid duplicates
-        ).all()
+        # assigned = WorkoutPlans.query.filter(
+        #     WorkoutPlans.plan_id.in_(assigned_plan_ids),
+        #     WorkoutPlans.is_active == True,
+        #     WorkoutPlans.owner_user_id != user.user_id  # avoid duplicates
+        # ).all()
         
-        all_plans = plans + assigned
+        # all_plans = plans + assigned
+        all_plans = plans   
         return {
             "plans": [_serialize_plan(p, user.user_id, detail=False) for p in all_plans]
         }
@@ -1186,7 +1189,7 @@ class RegenerateAssignmentCalendar(MethodView):
 
         db.session.commit()
 
-        _generate_calendar_from_assignment(assignment)
+        # _generate_calendar_from_assignment(assignment)
         db.session.commit()
 
         return {"message": "calendar regenerated"}
@@ -1232,8 +1235,77 @@ class PlanCalendar(MethodView):
             abort(500, description=str(e))
         return {"calendar_workout_ids": created}
     
-from datetime import datetime, timedelta
+@workout_blp.route("/assignments/mine")
+class MyAssignments(MethodView):
 
+    @jwt_required()
+    def get(self):
+        user = _current_user()
+
+        assignments = WorkoutPlanAssignments.query.filter_by(
+            assigned_to_user_id=user.user_id,
+            status=AssignmentStatusEnum.active
+        ).all()
+
+        result = []
+
+        for a in assignments:
+            plan = WorkoutPlans.query.get(a.plan_id)
+            if not plan:
+                continue
+
+            # load days
+            days = WorkoutPlanDays.query.filter_by(plan_id=plan.plan_id).all()
+
+            plan_days = []
+            for d in days:
+
+                # exercises
+                lines = WorkoutPlanDayExercises.query.filter_by(day_id=d.plan_day_id).all()
+
+                exercises = [
+                    {
+                        "exercise_id": l.exercise_id,
+                        "sets": l.sets,
+                        "reps": l.reps
+                    }
+                    for l in lines
+                ]
+
+                # calendar workouts (THIS IS THE KEY PART)
+                sessions = CalendarWorkouts.query.filter_by(
+                    plan_day_id=d.plan_day_id,
+                    for_user_id=user.user_id
+                ).order_by(CalendarWorkouts.scheduled_start.asc()).all()
+
+                plan_days.append({
+                    "plan_day_id": d.plan_day_id,
+                    "day_label": d.day_label,
+                    "exercises": exercises,
+                    "sessions": [
+                        {
+                            "calendar_workout_id": s.calendar_workout_id,
+                            "scheduled_start": s.scheduled_start,
+                            "scheduled_end": s.scheduled_end,
+                            "status": s.status
+                        }
+                        for s in sessions
+                    ]
+                })
+
+            result.append({
+                "assignment_id": a.assignment_id,
+                "status": a.status.value,
+                "start_date": a.start_date,
+                "end_date": a.end_date,
+                "plan": {
+                    "plan_id": plan.plan_id,
+                    "name": plan.name,
+                    "days": plan_days
+                }
+            })
+
+        return result
 
 @workout_blp.route("/calendar-workouts")
 class CalendarWorkoutsList(MethodView):
@@ -1255,7 +1327,7 @@ class CalendarWorkoutsList(MethodView):
         query = (
             CalendarWorkouts.query
             .options(
-                db.joinedload(CalendarWorkouts.plan_day)
+                joinedload(CalendarWorkouts.plan_day)
                 .joinedload(WorkoutPlanDays.plan)
             )
             .filter(CalendarWorkouts.for_user_id == user.user_id)
@@ -1274,6 +1346,35 @@ class CalendarWorkoutsList(MethodView):
                 CalendarWorkouts.scheduled_start >= start,
                 CalendarWorkouts.scheduled_start < end
             )
+        if view == "month":
+            year = args.get("year")
+            month = args.get("month")
+
+            today = datetime.utcnow().date()
+            print("ARGS:", args)
+            print("VIEW:", view)
+            print("YEAR:", args.get("year"))
+            print("MONTH:", args.get("month"))
+
+            if view == "month":
+                if year and month:
+                    year = int(year)
+                    month = int(month)
+                else:
+                    year = today.year
+                    month = today.month
+
+                start = datetime(year, month, 1)
+
+                if month == 12:
+                    end = datetime(year + 1, 1, 1)
+                else:
+                    end = datetime(year, month + 1, 1)
+
+                query = query.filter(
+                    CalendarWorkouts.scheduled_start >= start,
+                    CalendarWorkouts.scheduled_start < end
+                )
 
       
         if args.get("plan_day_id"):
@@ -1296,7 +1397,7 @@ class CalendarWorkoutsList(MethodView):
             {
                 "calendar_workout_id": w.calendar_workout_id,
                 "plan_day_id": w.plan_day_id,
-                "plan_day_name": w.plan_day.name if w.plan_day else None,
+                "plan_day_name": w.plan_day.plan.name if w.plan_day and w.plan_day.plan else None,
                 "plan_name": w.plan_day.plan.name if w.plan_day and w.plan_day.plan else None,
                 "scheduled_start": w.scheduled_start,
                 "scheduled_end": w.scheduled_end,

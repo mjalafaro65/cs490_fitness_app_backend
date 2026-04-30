@@ -167,8 +167,13 @@ class WorkoutLogQuerySchema(Schema):
 
 
 class CalendarWorkoutQuerySchema(Schema):
-    date = fields.Date(required=False)
-    view = fields.Str(required=False)
+    view = fields.String(required=False)
+    year = fields.Integer(required=False)
+    month = fields.Integer(required=False)
+    date = fields.String(required=False)
+    plan_day_id = fields.Integer(required=False)
+    status = fields.String(required=False)
+    plan_id = fields.Integer(required=False)
 
 
 class CalendarWorkoutUpdateSchema(Schema):
