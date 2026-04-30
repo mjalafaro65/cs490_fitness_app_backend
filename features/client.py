@@ -196,7 +196,8 @@ class ClientProfileView(MethodView):
             abort(500, description=f"Database error: {str(e)}")
 
 
-### Delete Daily records 
+### Delete Daily records
+### Resets all records to None
 @client_blp.route("/delete-daily")
 class DeleteDailyView(MethodView):
     @jwt_required()
@@ -219,6 +220,13 @@ class DeleteDailyView(MethodView):
 
         daily_survey.daily_goal = None
         daily_survey.target_focus = None
+        daily_survey.energy_level = None
+        daily_survey.water_oz = None
+        daily_survey.sleep_hours = None
+        daily_survey.mood_score = None
+        daily_survey.weight_lbs = None
+        daily_survey.notes = None
+
         try:
             db.session.commit()
             return daily_survey
@@ -275,6 +283,11 @@ class ClientPaymentPlanListView(MethodView):
             CoachProfiles.status == "approved",
             CoachProfiles.user_id == profile.user_id
         ).all()
+
+        # Check if the list is empty
+        if not plans:
+            abort(404, description="No active payment plans found.")
+
 
         return plans
 
