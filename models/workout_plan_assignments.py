@@ -15,7 +15,7 @@ class RepeatRuleEnum(enum.Enum):
 class AssignmentStatusEnum(enum.Enum):
     active = 'active'
     completed = 'completed'
-    cancelled = 'cancelled'
+    canceled = 'canceled'
 
 class WorkoutPlanAssignments(db.Model):
     __tablename__ = 'workout_plan_assignments'

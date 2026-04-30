@@ -35,10 +35,13 @@ class PlanCreateSchema(Schema):
     is_public = fields.Bool(load_default=False)
 
 
+
 class PlanUpdateSchema(Schema):
     name = fields.Str(required=False, validate=validate.Length(min=1, max=120))
     description = fields.Str(required=False, allow_none=True)
     is_public = fields.Bool(required=False)
+    
+    
 
 
 class PlanDayCreateSchema(Schema):
@@ -115,8 +118,12 @@ class PlanBrowseQuerySchema(Schema):
 
 
 class PlanAssignmentSchema(Schema):
-    start_date = fields.DateTime(required=False, allow_none=True)
-    end_date = fields.DateTime(required=False, allow_none=True)
+    
+    assigned_to_user_id= fields.Int()
+    # start_date = fields.DateTime(required=False, allow_none=True)
+    # end_date = fields.DateTime(required=False, allow_none=True)
+    start_date = fields.Date(required=False, allow_none=True)
+    end_date = fields.Date(required=False, allow_none=True)
     repeat_rule = fields.Str(
         required=False,
         validate=validate.OneOf(["none", "daily", "weekly", "monthly"]),
@@ -132,7 +139,6 @@ class CalendarOccurrenceSchema(Schema):
 
 class PlanCalendarSchema(Schema):
     occurrences = fields.List(fields.Nested(CalendarOccurrenceSchema), required=True)
-from marshmallow import Schema, fields, validate
 
 class WorkoutLogEntrySchema(Schema):
     workout_log_entry_id= fields.Int(dump_only=True)
@@ -167,8 +173,22 @@ class WorkoutLogQuerySchema(Schema):
 
 
 class CalendarWorkoutQuerySchema(Schema):
-    date = fields.Date(required=False)
-    view = fields.Str(required=False) 
+    view = fields.String(required=False)
+    year = fields.Integer(required=False)
+    month = fields.Integer(required=False)
+    date = fields.String(required=False)
+    plan_day_id = fields.Integer(required=False)
+    status = fields.String(required=False)
+    plan_id = fields.Integer(required=False)
+
+
+class CalendarWorkoutUpdateSchema(Schema):
+    scheduled_start = fields.DateTime(required=False)
+    scheduled_end = fields.DateTime(required=False)
+    status = fields.Str(
+        required=False,
+        validate=validate.OneOf(["scheduled", "completed", "skipped", "canceled"])
+    ) 
 
 
 class ExerciseSchema(SQLAlchemyAutoSchema):
@@ -209,3 +229,17 @@ class CalendarViewSchema(SQLAlchemyAutoSchema):
     
 class CalendarWorkoutQuerySchemaWeek(Schema):
     view = fields.String(required=False)
+    
+class AssignmentStatusUpdateSchema(Schema):
+    status = fields.Str(
+        required=True,
+        validate=validate.OneOf(["active", "completed", "canceled"])
+    )
+    
+class CalendarWorkoutUpdateSchema(Schema):
+    status = fields.Str(
+        required=False,
+        validate=validate.OneOf(["scheduled", "completed", "canceled"])
+    )
+    scheduled_start = fields.DateTime(required=False)
+    scheduled_end = fields.DateTime(required=False)
