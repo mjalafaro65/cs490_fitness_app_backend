@@ -54,6 +54,7 @@ from .coach_favorites import CoachFavorites
 from .goals import Goals
 from .daily_survey import DailySurvey
 from .coach_progress_photos import CoachProgressPhotos
+from .client_progress_photos import ClientProgressPhotos
 from .coach_reports import CoachReports
 from .saved_coaches import SavedCoaches
 from .shared_plans import SharedPlans

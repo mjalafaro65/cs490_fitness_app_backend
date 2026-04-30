@@ -22,7 +22,7 @@ from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema, Initia
 from models.invoices import StatusEnumList
 from models.payments import StatusEnum_Payments
 from models.coach_hire_requests import StatusEnum
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes, ClientProgressPhotos
 from .utils import create_notification
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
@@ -1313,3 +1313,61 @@ class RehireCoach(MethodView):
         
 #         return {"message": "No interaction found to remove"}
 # >>>>>>> develop
+
+@client_blp.route("/progress-photos")
+class ClientProgressPhotosView(MethodView):
+    @jwt_required()
+    def get(self):
+        """
+        Get client's progress photos
+        """
+        user = _current_user()
+        
+        progress_photos = ClientProgressPhotos.query.filter_by(client_id=user.user_id).first()
+        
+        if progress_photos:
+            return {
+                "before_photo_url": progress_photos.before_photo_url,
+                "after_photo_url": progress_photos.after_photo_url
+            }
+        else:
+            return {
+                "before_photo_url": None,
+                "after_photo_url": None
+            }
+    
+    @jwt_required()
+    def post(self):
+        """
+        Save or update client's progress photos
+        """
+        user = _current_user()
+        data = request.get_json()
+        
+        before_url = data.get('before_photo_url')
+        after_url = data.get('after_photo_url')
+        
+        progress_photos = ClientProgressPhotos.query.filter_by(client_id=user.user_id).first()
+        
+        if progress_photos:
+            # Update existing record
+            if before_url is not None:
+                progress_photos.before_photo_url = before_url
+            if after_url is not None:
+                progress_photos.after_photo_url = after_url
+            progress_photos.updated_at = datetime.utcnow()
+        else:
+            # Create new record
+            progress_photos = ClientProgressPhotos(
+                client_id=user.user_id,
+                before_photo_url=before_url,
+                after_photo_url=after_url
+            )
+            db.session.add(progress_photos)
+        
+        try:
+            db.session.commit()
+            return {"message": "Progress photos saved successfully"}
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Database error: {str(e)}")
