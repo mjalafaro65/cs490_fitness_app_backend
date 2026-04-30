@@ -220,12 +220,6 @@ class DeleteDailyView(MethodView):
 
         daily_survey.daily_goal = None
         daily_survey.target_focus = None
-        daily_survey.energy_level = None
-        daily_survey.water_oz = None
-        daily_survey.sleep_hours = None
-        daily_survey.mood_score = None
-        daily_survey.weight_lbs = None
-        daily_survey.notes = None
 
         try:
             db.session.commit()
