@@ -100,7 +100,8 @@ class TopCoach(MethodView):
     .group_by(
         Users.user_id, 
         Users.first_name, 
-        Users.last_name, 
+        Users.last_name,
+        CoachProfiles.coach_profile_id, 
         Specialties.name, 
         rating_stmt.c.avg_rating, 
         rating_stmt.c.total_reviews
