@@ -24,7 +24,8 @@ from features.insights import insights_blp
 
 load_dotenv()
 
-ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
+# ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
+ca_path = os.path.join(os.path.dirname(__file__), 'isrgrootx1.pem')
 
 ##Set up config class 
 class Config:
@@ -39,9 +40,14 @@ class Config:
         SQLALCHEMY_ENGINE_OPTIONS = {
             "connect_args": {
                 "ssl_ca": ca_path,
-                "ssl_verify_cert": True
-            }
+                "ssl_verify_cert": False
+            },
+            "pool_size": 5,
+            "pool_recycle": 280,
+            "pool_pre_ping": True,
+            "pool_timeout": 30
         }
+       
     ############ THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -73,6 +79,8 @@ app.config.from_object(Config)
 CORS(app)
 
 db.init_app(app)
+
+
 migrate = Migrate(app, db)
 
 
