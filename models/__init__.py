@@ -10,6 +10,7 @@ from .client_profiles import ClientProfiles
 from .coach_profiles import CoachProfiles
 from .coach_client_relationships import CoachClientRelationships
 from .coach_hire_requests import CoachHireRequests
+from .coach_availavilty import CoachAvailability
 
 # Workouts
 from .exercises import Exercises
@@ -49,11 +50,15 @@ from .coach_reviews import CoachReviews
 from .review_images import ReviewImages
 from .review_flags import ReviewFlags
 from .review_interactions import ReviewInteractions
+from .coach_favorites import CoachFavorites
 from .goals import Goals
 from .daily_survey import DailySurvey
 from .coach_progress_photos import CoachProgressPhotos
+from .client_progress_photos import ClientProgressPhotos
 from .coach_reports import CoachReports
 from .saved_coaches import SavedCoaches
 from .shared_plans import SharedPlans
 from .specialties import Specialties
 from .coach_documents import CoachDocuments
+
+from .user_log_in_activity import UserLoginActivity

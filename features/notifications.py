@@ -1,9 +1,9 @@
 from flask.views import MethodView
 from flask_smorest import Blueprint,abort
-from models import Users, Notifications
+from models import Users, Notifications, UserRoles
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func, select, desc
+from sqlalchemy import func, or_, select, desc
 from schemas.notif_schema import NotificationResponseSchema
 
 notif_blp=Blueprint("Notifications", __name__, url_prefix="/notifications", description="Notifications feat")
@@ -15,23 +15,30 @@ class NotificationsView(MethodView):
     def get(self):
         """Get all notifications for a specific user"""
         curr_auth_id = get_jwt_identity()
-        curr_user_id = db.session.query(Users.user_id).filter_by(auth_id=curr_auth_id).scalar()
         
-        if not curr_user_id:
-            abort(401, description="User not found.")
+        user = Users.query.filter_by(auth_id=curr_auth_id).first()
+        
 
+        # get roles via relationship
+        user = Users.query.filter_by(auth_id=curr_auth_id).first()
+        if not user:
+            abort(401, description="User not found.")
+        role_ids = [r.role_id for r in user.roles]
+
+                
         stmt = (
             select(Notifications)
-            .where(Notifications.user_id == curr_user_id)
-            .order_by(Notifications.created_at.desc())
+            .where(
+                or_(
+                    Notifications.user_id == user.user_id,
+                    Notifications.role_id.in_(role_ids)
+                )
+            )
+            .order_by(Notifications.is_read.asc(), Notifications.created_at.desc())
         )
 
         notifications = db.session.execute(stmt).scalars().all()
-        
-        if not notifications:
-            return []
-
-        return notifications
+        return notifications or []
     
 
 

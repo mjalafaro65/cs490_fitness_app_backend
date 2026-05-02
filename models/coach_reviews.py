@@ -9,10 +9,12 @@ class CoachReviews(db.Model):
     coach_profile_id = db.Column(db.Integer, db.ForeignKey('coach_profiles.coach_profile_id'), nullable=False)
     client_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
-    rating = db.Column(db.Integer, CheckConstraint('rating >= 1 AND rating <= 100'), nullable=False)
+    rating = db.Column(db.Integer, CheckConstraint('rating >= 1 AND rating <= 5'), nullable=False)
     comment = db.Column(db.Text, nullable=True)
     is_anonymous = db.Column(db.Boolean, default=False, nullable=False)
     is_flagged = db.Column(db.Boolean, default=False, nullable=False)
     is_visible = db.Column(db.Boolean, default=True, nullable=False)
+    helpful_count = db.Column(db.Integer, default=0, nullable=False)
+    unhelpful_count = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

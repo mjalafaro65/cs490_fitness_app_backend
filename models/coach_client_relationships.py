@@ -19,6 +19,9 @@ class CoachClientRelationships(db.Model):
     
     payment_plan_id = db.Column(db.Integer, db.ForeignKey("payment_plans.payment_plan_id"), nullable=False)
     status = db.Column(db.Enum(status_enum), default=status_enum.active)
-    term_reason = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    termination_reason = db.Column(db.String(255))
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ended_at = db.Column(db.DateTime,  nullable=True, default=datetime.utcnow)
+    
+    coach_profile = db.relationship("CoachProfiles", backref="relationships")
+    client = db.relationship("Users", backref="client_relationships")

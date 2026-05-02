@@ -16,8 +16,11 @@ class ClientProfiles(db.Model):
     date_of_birth = db.Column(db.Date, nullable=True)
     gender = db.Column(db.Enum(gender_enum), nullable=True)
     profile_photo = db.Column(db.String(255), nullable=True)
+    timezone = db.Column(db.String(50), nullable=False, default="America/New_York")
     bio = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,onupdate=datetime.utcnow)
     height = db.Column(db.Numeric(5,2), nullable=True)
     weight = db.Column(db.Numeric(5,2), nullable=True)
+
+   

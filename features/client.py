@@ -12,12 +12,35 @@ from models.refund_disputes import StatusEnum_Disputes
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
-from models import Users
+from models import Users, Goals, PaymentMethods, Payments, Specialties
+from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews
+from models.review_interactions import InteractionType
+from datetime import datetime, timezone
+from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema, InitiateFireSchema, ConfirmTerminationSchema
+
+from models.invoices import StatusEnumList
+from models.payments import StatusEnum_Payments
+from models.coach_hire_requests import StatusEnum
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes, ClientProgressPhotos
+from .utils import create_notification
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
+def _auth_id_int():
+    raw = get_jwt_identity()
+    if raw is None:
+        abort(401, description="Not authenticated.")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        abort(401, description="Invalid token.")
+
+def _current_user():
+    user = Users.query.filter_by(auth_id=_auth_id_int()).first()
+    if not user:
+        abort(404, description="User record not found.")
+    return user
 @client_blp.route("/daily-survey")
 class DailySurveyView(MethodView):
     @jwt_required()
@@ -173,7 +196,8 @@ class ClientProfileView(MethodView):
             abort(500, description=f"Database error: {str(e)}")
 
 
-### Delete Daily records 
+### Delete Daily records
+### Resets all records to None
 @client_blp.route("/delete-daily")
 class DeleteDailyView(MethodView):
     @jwt_required()
@@ -196,6 +220,7 @@ class DeleteDailyView(MethodView):
 
         daily_survey.daily_goal = None
         daily_survey.target_focus = None
+
         try:
             db.session.commit()
             return daily_survey
@@ -236,10 +261,30 @@ class EditDailyView(MethodView):
             abort(500, description="Failed to update the daily log.")
 
 
-@client_blp.route("/coach-hire")
-@jwt_required()
-def test():
-    return "Sweet Potato"
+
+
+@client_blp.route("/coach-payment-plans/<int:coach_profile_id>")
+class ClientPaymentPlanListView(MethodView):
+    @client_blp.response(200, PaymentPlanSchema(many=True))
+    def get(self,coach_profile_id):
+        print(coach_profile_id)
+        profile = CoachProfiles.query.get_or_404(coach_profile_id)
+         
+        plans = PaymentPlans.query.join(
+            CoachProfiles,
+            PaymentPlans.coach_profile_id == CoachProfiles.coach_profile_id
+        ).filter(
+            PaymentPlans.is_active == True,
+            CoachProfiles.status == "approved",
+            CoachProfiles.user_id == profile.user_id
+        ).all()
+
+        # Check if the list is empty
+        # if not plans:
+        #     abort(404, description="No active payment plans found.")
+            
+        return plans
+
 
 
 
@@ -249,13 +294,15 @@ class ClientHireRequestCreateView(MethodView):
     @client_blp.arguments(HireRequestCreateSchema)
     @client_blp.response(201, HireRequestStatusSchema)
     def post(self, data):
-        current_user_id = get_jwt_identity()
+        current_auth_id= get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
         
         coach_profile_id = data["coach_profile_id"]
         payment_plan_id = data["payment_plan_id"]
         auto_pay_enabled = data.get("auto_pay_enabled", False)
 
-        print(f"DEBUG: Processing request for User {current_user_id} -> Coach {coach_profile_id}")
+        print(f"DEBUG: Processing request for User {user.user_id} -> Coach {coach_profile_id}")
 
         coach_profile = db.session.execute(
             select(CoachProfiles).where(
@@ -285,7 +332,7 @@ class ClientHireRequestCreateView(MethodView):
 
         existing_pending = db.session.execute(
             select(CoachHireRequests).where(
-                CoachHireRequests.client_user_id == current_user_id,
+                CoachHireRequests.client_user_id == user.user_id,
                 CoachHireRequests.coach_profile_id == coach_profile_id,
                 CoachHireRequests.status == "pending"
             )
@@ -295,12 +342,19 @@ class ClientHireRequestCreateView(MethodView):
             abort(409, description="Pending request already exists")
 
         new_request = CoachHireRequests(
-            client_user_id=current_user_id,
+            client_user_id=user.user_id,
             coach_profile_id=coach_profile_id,
             payment_plan_id=payment_plan_id,
             status="pending",
             auto_pay_enabled=auto_pay_enabled
         )
+
+        create_notification(
+                user_id=user.user_id,
+                type_slug="coach-request",
+                title="New Coach Hire",
+                body=f"Your new requests has been received and the coach will be made aware"
+            )
 
         try:
             db.session.add(new_request)
@@ -309,10 +363,9 @@ class ClientHireRequestCreateView(MethodView):
             print(f"SUCCESS: Created Request ID {new_request.request_id}")
             return new_request
         except Exception as e:
-            db.session.rollback()
+            db.sesssion.rollback()
             print(f"DATABASE ERROR: {str(e)}")
             abort(500, description="Internal database error")
-
 
 
 
@@ -321,7 +374,7 @@ class ClientHireRequestDetailView(MethodView):
     @jwt_required()
     @client_blp.response(200, HireRequestStatusSchema)
     def delete(self, request_id):
-        current_user_id = get_jwt_identity()
+        current_user =_current_user()
 
         hire_request = db.session.execute(
             select(CoachHireRequests).where(
@@ -332,16 +385,25 @@ class ClientHireRequestDetailView(MethodView):
         if not hire_request:
             abort(404, description="Hire request not found")
 
-        if int(hire_request.client_user_id) != int(current_user_id):
+        if int(hire_request.client_user_id) != int(current_user.user_id):
             abort(403, description="Not your request")
 
-        current_status_str = str(hire_request.status).lower()
+        current_status_str = hire_request.status.value
 
+        
         if "pending" not in current_status_str:
-            abort(400, description=f"Only pending requests can be canceled. Current: {current_status_str}")
-
+            return {
+                "message": f"Only pending requests can be canceled. Current: {current_status_str}"
+            }, 400
         try:
-            hire_request.status = "canceled"
+            hire_request.status = StatusEnum.canceled
+
+            create_notification(
+                user_id=current_user.user_id,
+                type_slug="coach-request-canceled",
+                title="Cancel Coach Request",
+                body=f"Your coach hire request has been canceled"
+            )
             
             db.session.commit()
             print(f"SUCCESS: Request {request_id} set to canceled")
@@ -358,15 +420,17 @@ class ClientHireRequestListView(MethodView):
     @jwt_required()
     @client_blp.response(200, HireRequestListSchema(many=True))
     def get(self):
-        current_user_id = get_jwt_identity()
-
+        current_user= _current_user()
+    
         requests = db.session.execute(
             select(CoachHireRequests)
-            .where(CoachHireRequests.client_user_id == current_user_id)
+            .where(CoachHireRequests.client_user_id == current_user.user_id)
             .order_by(CoachHireRequests.created_at.desc())
         ).scalars().all()
 
+        print(requests)
         return requests
+
     
 
 
@@ -376,7 +440,7 @@ class ClientHireRequestStatusView(MethodView):
     @jwt_required()
     @client_blp.response(200, HireRequestStatusSchema)
     def get(self, request_id):
-        current_user_id = get_jwt_identity()
+        current_user_id = _current_user()
 
         hire_request = db.session.execute(
             select(CoachHireRequests).where(
@@ -387,10 +451,16 @@ class ClientHireRequestStatusView(MethodView):
         if not hire_request:
             abort(404, description="Hire request not found")
 
-        if int(hire_request.client_user_id) != int(current_user_id):
-            abort(403, description="Not allowed")
+        if int(hire_request.client_user_id) != int(current_user_id.user_id):
+            #print(hire_request.client_user_id + " != " + current_user_id)
+            abort(403, description="Not allowed ")
 
         return hire_request
+
+    
+
+
+
 ### Client Reviews Coach
 @client_blp.route("/review-coach/<int:coach_id>")
 class ReviewCoachView(MethodView):
@@ -407,11 +477,19 @@ class ReviewCoachView(MethodView):
         if not coach:
             abort(404, description="Coach profile not found.")
 
+        # TEMPORARILY DISABLED: Check if client has a relationship with the coach (active or terminated)
+        # relationship = CoachClientRelationships.query.filter_by(
+        #     coach_profile_id=coach_id,
+        #     client_user_id=user.user_id
+        # ).first()
+
+        # if not relationship:
+        #     abort(403, description="You can only review coaches you have hired or previously worked with.")
+
         existing_review = CoachReviews.query.filter_by(
             coach_profile_id=coach_id,
             client_user_id=user.user_id
         ).first()
-        print(existing_review)
 
         if existing_review:
             abort(400, description="You have already submitted a review for this coach.")

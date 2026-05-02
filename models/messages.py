@@ -13,7 +13,6 @@ class Messages(db.Model):
     message_type = db.Column(db.String(20), default='text', nullable=False)  # text, image, file
     is_read = db.Column(db.Boolean, default=False, nullable=False)
     read_at = db.Column(db.DateTime)
-    delivered_at = db.Column(db.DateTime)
     sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     deleted_at = db.Column(db.DateTime)
     

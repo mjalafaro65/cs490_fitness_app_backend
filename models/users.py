@@ -56,24 +56,21 @@ class Users(db.Model):
     )
     meal_logs = db.relationship(
         "MealLogs",
-        cascade="all, delete-orphan"
     )
     # meal_plan_assignments = db.relationship(
     #     "MealPlanAssignments",
     #     foreign_keys="MealPlanAssignments.user_id",
     #     cascade="all, delete-orphan"
     # )
-    meal_plans = db.relationship(
-        "MealPlans",
-        cascade="all, delete-orphan"
-    )
+    # meal_plans = db.relationship(
+    #     "MealPlans",
+    # )
     # messages = db.relationship(
     #     "Messages",
     #     cascade="all, delete-orphan"
     # )
     notifications = db.relationship(
         "Notifications",
-        cascade="all, delete-orphan"
     )
     # payment_methods = db.relationship(
     #     "PaymentMethods",
@@ -112,7 +109,6 @@ class Users(db.Model):
     # )
     workout_logs = db.relationship(
         "WorkoutLogs",
-        cascade="all, delete-orphan"
     )
     # workout_plan_assignments_assigned_to = db.relationship(
     #     "WorkoutPlanAssignments",
@@ -124,10 +120,10 @@ class Users(db.Model):
     #     foreign_keys="WorkoutPlanAssignments.assigned_by_user_id",
     #     cascade="all, delete-orphan"
     # )
-    workout_plans = db.relationship(
-        "WorkoutPlans",
-        cascade="all, delete-orphan"
-    )
+    # workout_plans = db.relationship(
+    #     "WorkoutPlans",
+    #     cascade="all, delete-orphan"
+    # )
 
 
     first_name = db.Column(db.String(255), nullable=False)
@@ -136,6 +132,19 @@ class Users(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     disabled_at = db.Column(db.DateTime, nullable=True)
     disabled_by_admin_user_id = db.Column(db.Integer, nullable=True)
+    
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
     
+    conversation_links = db.relationship(
+        "ConversationParticipants",
+        back_populates="user"
+    )
+    
+    roles = db.relationship(
+        "Roles",
+        secondary="user_roles",
+        primaryjoin="Users.auth_id == UserRoles.user_id",
+        secondaryjoin="Roles.role_id == UserRoles.role_id",
+        backref="users"
+    )    

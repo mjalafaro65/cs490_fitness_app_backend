@@ -20,4 +20,3 @@ class CoachHireRequests(db.Model):
     auto_pay_enabled = db.Column(db.Boolean, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     decided_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-

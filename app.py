@@ -20,23 +20,37 @@ from features.messaging import messaging_blp
 from features.socketio_events import socketio
 from features.user import user_blp
 from features.nutrition import nutrition_bp
+from features.insights import insights_blp
 
 load_dotenv()
 
-ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
+# ca_path = os.path.join(os.path.dirname(__file__), 'ca.pem')
+ca_path = os.path.join(os.path.dirname(__file__), 'isrgrootx1.pem')
 
 ##Set up config class 
 class Config:
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+
+    ########### THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
+    if os.environ.get('FLASK_ENV') == 'testing' or os.environ.get('TESTING') == 'True':
+        SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+        TESTING = True
+    else:
+        SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+        # Connection arguments
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "connect_args": {
+                "ssl_ca": ca_path,
+                "ssl_verify_cert": False
+            },
+            "pool_size": 5,
+            "pool_recycle": 280,
+            "pool_pre_ping": True,
+            "pool_timeout": 30
+        }
+       
+    ############ THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    #Connection arguments
-    # SQLALCHEMY_ENGINE_OPTIONS = {
-    #     "connect_args": {
-    #         "ssl_ca": ca_path,
-    #         "ssl_verify_cert": True
-    #     }
-    # }
 
     ## swagger configuration 
     API_TITLE = "Fitness Project API"
@@ -65,6 +79,8 @@ app.config.from_object(Config)
 CORS(app)
 
 db.init_app(app)
+
+
 migrate = Migrate(app, db)
 
 
@@ -88,6 +104,7 @@ api.register_blueprint(notif_blp)
 api.register_blueprint(messaging_blp)
 api.register_blueprint(user_blp)
 api.register_blueprint(nutrition_bp)
+api.register_blueprint(insights_blp)
 
 
 

@@ -18,3 +18,16 @@ class AdminCheckReviewsSchema(Schema):
 
 class AdminPurgeUserSchema(Schema):
     user_id = fields.Int(required=True)
+
+class DisableAccountSchema(Schema):
+    user_id = fields.Int(required=True)
+    is_active = fields.Bool(required=True)
+    disabled_at = fields.DateTime(dump_only=True)
+    disabled_by_admin_user_id = fields.Int(dump_only=True)
+    
+class ActiveUsersQuerySchema(Schema):
+    period = fields.String(
+        required=False,
+        load_default="daily",
+        validate=fields.validate.OneOf(["daily", "weekly", "monthly"])
+    )

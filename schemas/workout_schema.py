@@ -1,4 +1,7 @@
 from marshmallow import Schema, fields, validate, pre_load
+from models import Exercises,WorkoutPlanDayExercises, WorkoutPlans, CalendarWorkouts, WorkoutPlanDays
+from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
+
 
 
 class ExerciseCreateSchema(Schema):
@@ -32,10 +35,13 @@ class PlanCreateSchema(Schema):
     is_public = fields.Bool(load_default=False)
 
 
+
 class PlanUpdateSchema(Schema):
     name = fields.Str(required=False, validate=validate.Length(min=1, max=120))
     description = fields.Str(required=False, allow_none=True)
     is_public = fields.Bool(required=False)
+    
+    
 
 
 class PlanDayCreateSchema(Schema):
@@ -112,8 +118,12 @@ class PlanBrowseQuerySchema(Schema):
 
 
 class PlanAssignmentSchema(Schema):
-    start_date = fields.DateTime(required=False, allow_none=True)
-    end_date = fields.DateTime(required=False, allow_none=True)
+    
+    assigned_to_user_id= fields.Int()
+    # start_date = fields.DateTime(required=False, allow_none=True)
+    # end_date = fields.DateTime(required=False, allow_none=True)
+    start_date = fields.Date(required=False, allow_none=True)
+    end_date = fields.Date(required=False, allow_none=True)
     repeat_rule = fields.Str(
         required=False,
         validate=validate.OneOf(["none", "daily", "weekly", "monthly"]),
@@ -129,17 +139,107 @@ class CalendarOccurrenceSchema(Schema):
 
 class PlanCalendarSchema(Schema):
     occurrences = fields.List(fields.Nested(CalendarOccurrenceSchema), required=True)
-from marshmallow import Schema, fields, validate
+
+class WorkoutLogEntrySchema(Schema):
+    workout_log_entry_id= fields.Int(dump_only=True)
+    calendar_workout_id = fields.Int(allow_none=True)
+    plan_day_exercise_id = fields.Int(allow_none=True)
+    exercise_id = fields.Int(required=True)
+
+    sets = fields.Int(allow_none=True)
+    reps = fields.Int(allow_none=True)
+    weight = fields.Float(allow_none=True)
+    rpe = fields.Float(allow_none=True)
+    distance = fields.Float(allow_none=True)
+    calories = fields.Float(allow_none=True)
+    duration_minutes = fields.Float(allow_none=True)
+    notes = fields.Str(allow_none=True)
 
 class WorkoutLogSchema(Schema):
-    exercise_id = fields.Int(required=True)
-    plan_day_exercise_id = fields.Int(dump_only=True)
-    sets = fields.Int(validate=validate.Range(min=0))
-    reps = fields.Int(validate=validate.Range(min=0))
-    weight = fields.Float(validate=validate.Range(min=0))
-    rpe = fields.Int(validate=validate.Range(min=0))
-    distance = fields.Float(validate=validate.Range(min=0))
-    calories = fields.Float(validate=validate.Range(min=0))
-    duration_minutes = fields.Float(validate=validate.Range(min=0))
-    notes = fields.Str(validate=validate.Length(max=1000))
+    workout_log_id = fields.Int(dump_only=True)
+    user_id =fields.Int(allow_none=True)
+    calendar_workout_id = fields.Int(allow_none=True)
+    logged_at = fields.DateTime(dump_only=True)
+    notes = fields.Str()
 
+    entries = fields.List(fields.Nested(WorkoutLogEntrySchema))
+
+
+    
+class WorkoutLogQuerySchema(Schema):
+    client_id = fields.Int(allow_none=True)
+    calendar_workout_id = fields.Int(required=False)
+
+
+
+class CalendarWorkoutQuerySchema(Schema):
+    view = fields.String(required=False)
+    year = fields.Integer(required=False)
+    month = fields.Integer(required=False)
+    date = fields.String(required=False)
+    plan_day_id = fields.Integer(required=False)
+    status = fields.String(required=False)
+    plan_id = fields.Integer(required=False)
+
+
+class CalendarWorkoutUpdateSchema(Schema):
+    scheduled_start = fields.DateTime(required=False)
+    scheduled_end = fields.DateTime(required=False)
+    status = fields.Str(
+        required=False,
+        validate=validate.OneOf(["scheduled", "completed", "skipped", "canceled"])
+    ) 
+
+
+class ExerciseSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = Exercises
+        load_instance = True
+        
+class PlanDayExerciseSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlanDayExercises
+        load_instance = True
+
+    exercise = fields.Nested(ExerciseSchema)
+
+
+
+
+
+class PlanSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlans
+        load_instance = True
+
+class PlanDaySchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = WorkoutPlanDays
+        load_instance = True
+
+    exercises = fields.Nested(PlanDayExerciseSchema, many=True)
+    plan = fields.Nested(PlanSchema)
+
+class CalendarViewSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = CalendarWorkouts
+        load_instance = True
+
+    plan_day = fields.Nested(PlanDaySchema)
+    
+class CalendarWorkoutQuerySchemaWeek(Schema):
+    view = fields.String(required=False)
+    
+class AssignmentStatusUpdateSchema(Schema):
+    status = fields.Str(
+        required=True,
+        validate=validate.OneOf(["active", "completed", "canceled"])
+    )
+    
+class CalendarWorkoutUpdateSchema(Schema):
+    status = fields.Str(
+        required=False,
+        validate=validate.OneOf(["scheduled", "completed", "canceled"])
+    )
+    scheduled_start = fields.DateTime(required=False)
+    scheduled_end = fields.DateTime(required=False)
