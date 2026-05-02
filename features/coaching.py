@@ -80,34 +80,38 @@ class TopCoach(MethodView):
                 Users.first_name,
                 CoachProfiles.coach_profile_id,
                 Users.last_name,
-               func.max(CoachProfiles.bio).label("bio"),
-        func.max(CoachProfiles.profile_photo).label("profile_photo"),
-        Specialties.name.label("specialty_name"),
-        func.max(CoachProgressPhotos.before_photo_url).label("before_photo_url"),
-        func.max(CoachProgressPhotos.after_photo_url).label("after_photo_url"),
-        func.max(CoachProgressPhotos.description).label("transformation_desc"),
-        rating_stmt.c.avg_rating,
-        rating_stmt.c.total_reviews
-    )
-    .join(CoachProfiles, Users.user_id == CoachProfiles.user_id) 
-    .join(CoachProgressPhotos, CoachProfiles.coach_profile_id == CoachProgressPhotos.coach_profile_id)
-    .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)
-    .join(rating_stmt, CoachProfiles.coach_profile_id == rating_stmt.c.coach_profile_id)
-    .join(UserRoles, Users.auth_id == UserRoles.user_id)
-    .filter(UserRoles.role_id == 2)
-    .filter(CoachProfiles.status == 'approved') 
-    # Group by the main identity columns
-    .group_by(
-        Users.user_id, 
-        Users.first_name, 
-        Users.last_name, 
-        Specialties.name, 
-        rating_stmt.c.avg_rating, 
-        rating_stmt.c.total_reviews
-    )
-    .order_by(desc(rating_stmt.c.avg_rating), desc(rating_stmt.c.total_reviews))
-    .limit(3)
-)
+                func.max(CoachProfiles.bio).label("bio"),
+                func.max(CoachProfiles.profile_photo).label("profile_photo"),
+                Specialties.name.label("specialty_name"),
+                func.max(CoachProgressPhotos.before_photo_url).label("before_photo_url"),
+                func.max(CoachProgressPhotos.after_photo_url).label("after_photo_url"),
+                func.max(CoachProgressPhotos.description).label("transformation_desc"),
+                rating_stmt.c.avg_rating,
+                rating_stmt.c.total_reviews
+            )
+            .join(CoachProfiles, Users.user_id == CoachProfiles.user_id) 
+            # Use outerjoin so coaches without photos aren't dropped
+            .outerjoin(CoachProgressPhotos, CoachProfiles.coach_profile_id == CoachProgressPhotos.coach_profile_id)
+            .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)
+            # Use outerjoin so coaches with 0 reviews aren't dropped
+            .outerjoin(rating_stmt, CoachProfiles.coach_profile_id == rating_stmt.c.coach_profile_id)
+            # Double check this line: Should it be Users.user_id == UserRoles.user_id?
+            .join(UserRoles, Users.auth_id == UserRoles.user_id)
+            .filter(UserRoles.role_id == 2)
+            .filter(CoachProfiles.status == 'approved') 
+            .group_by(
+                Users.user_id, 
+                Users.first_name, 
+                Users.last_name,
+                CoachProfiles.coach_profile_id, 
+                Specialties.name, 
+                rating_stmt.c.avg_rating, 
+                rating_stmt.c.total_reviews
+            )
+            # Use desc() with nulls_last if you want coaches with 0 reviews at the bottom
+            .order_by(desc(rating_stmt.c.avg_rating), desc(rating_stmt.c.total_reviews))
+            .limit(3)
+        )
 
         try:
             result = db.session.execute(stmt).all()
