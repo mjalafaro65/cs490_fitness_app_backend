@@ -13,6 +13,7 @@ class WorkoutPlans(db.Model):
     is_public= db.Column(db.Boolean)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
+    is_template = db.Column(db.Boolean, default=True, nullable=False)
     copied_from_plan_id = db.Column(db.Integer, db.ForeignKey('workout_plans.plan_id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

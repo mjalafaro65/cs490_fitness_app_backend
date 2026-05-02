@@ -464,6 +464,7 @@ class MyPlans(MethodView):
         assigned = WorkoutPlans.query.filter(
             WorkoutPlans.plan_id.in_(assigned_plan_ids),
             WorkoutPlans.is_active == True,
+            WorkoutPlans.is_template ==True,
             WorkoutPlans.owner_user_id != user.user_id  # avoid duplicates
         ).all()
         
@@ -624,18 +625,32 @@ class PlanItem(MethodView):
             abort(404, description="Plan not found.")
         if not _plan_writable(plan, user.user_id):
             abort(403, description="Not allowed.")
+            
+        has_active_assignments = WorkoutPlanAssignments.query.filter_by(
+            plan_id=plan_id,
+            status=AssignmentStatusEnum.active
+        ).first()
+
+        if has_active_assignments:
+            # freeze old plan, create new version
+            plan.is_template = False
+            target = _duplicate_plan_for_user(plan, user.user_id, data.get("name"))
+            db.session.flush()
+        else:
+            target = plan
+            
         if "name" in data and data["name"] is not None:
-            plan.name = data["name"]
+            target.name = data["name"]
         if "description" in data:
-            plan.description = data["description"]
+            target.description = data["description"]
         if "is_public" in data and data["is_public"] is not None:
-            plan.is_public = bool(data["is_public"])
+            target.is_public = bool(data["is_public"])
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
             abort(500, description=str(e))
-        return _serialize_plan(plan, user.user_id, detail=True)
+        return _serialize_plan(target, user.user_id, detail=True)
 
     @jwt_required()
     @workout_blp.response(200)
@@ -865,10 +880,13 @@ class PlanAssignmentList(MethodView):
         if not plan or not _plan_writable(plan, user.user_id):
             abort(403)
 
-        assignments = WorkoutPlanAssignments.query.filter_by(
-            plan_id=plan_id
-        ).all()
-
+        assignments = (
+            db.session.query(WorkoutPlanAssignments, Users)
+            .join(Users, Users.user_id == WorkoutPlanAssignments.assigned_to_user_id)
+            .filter(WorkoutPlanAssignments.plan_id == plan_id)
+            .all()
+        )
+        
         result = []
         for a in assignments:
             client = Users.query.get(a.assigned_to_user_id)
@@ -879,10 +897,78 @@ class PlanAssignmentList(MethodView):
                 "start_date": a.start_date.isoformat() if a.start_date else None,
                 "end_date": a.end_date.isoformat() if a.end_date else None,
                 "status": a.status.value if a.status else None,
-                "repeat_rule": a.repeat_rule.value if a.repeat_rule else None,
             })
 
         return {"assignments": result}
+
+    @jwt_required()
+    @workout_blp.arguments(PlanAssignmentSchema)
+    @workout_blp.response(201)
+    def post(self, data, plan_id):
+        """Attach a plan to your account with repeat metadata (schedule shell)."""
+        user=  _current_user()
+
+        plan = WorkoutPlans.query.filter(
+            WorkoutPlans.plan_id == plan_id,
+            WorkoutPlans.is_active == True
+        ).first()
+        
+        if not plan or not _plan_readable(plan, user.user_id):
+            abort(404, description="Plan not found.")
+            
+        assigned_to_user_id = data.get("assigned_to_user_id") or user.user_id
+
+        if assigned_to_user_id != user.user_id:
+            coach_profile = CoachProfiles.query.filter_by(
+                user_id=user.user_id
+            ).first()
+
+            if not coach_profile:
+                abort(403, "Only coaches can assign to clients")
+
+            rel = CoachClientRelationships.query.filter_by(
+                coach_profile_id=coach_profile.coach_profile_id,
+                client_user_id=assigned_to_user_id,
+                status=status_enum.active
+            ).first()
+
+            if not rel:
+                abort(403, "Not your client")
+
+            assignment_type = AssignmentTypeEnum.coach
+        else:
+            assignment_type = AssignmentTypeEnum.self
+        
+    
+       
+        row = WorkoutPlanAssignments(
+            plan_id=plan.plan_id,
+            assigned_to_user_id=assigned_to_user_id,
+            assigned_by_user_id=user.user_id,
+            assignment_type=assignment_type,
+            start_date=data.get("start_date"),
+            end_date=data.get("end_date"),
+            status=AssignmentStatusEnum.active,
+        )
+        db.session.add(row)
+        db.session.flush() 
+        try:
+            # _generate_calendar_from_assignment(row)
+
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+        return {
+            "assignment_id": row.assignment_id,
+            "plan_id": row.plan_id,
+            "assigned_to_user_id": row.assigned_to_user_id,
+            "start_date": row.start_date.isoformat() if row.start_date else None,
+            "end_date": row.end_date.isoformat() if row.end_date else None,
+            "status": row.status.value if row.status else None,
+        }
+
+
     
 @workout_blp.route("/plans/<int:plan_id>/days/<int:day_id>/exercises")
 class PlanDayExercises(MethodView):
@@ -1022,80 +1108,6 @@ class PlanDayExerciseItem(MethodView):
             abort(500, description=str(e))
         return {"message": "Removed."}
 
-
-@workout_blp.route("/plans/<int:plan_id>/assignments")
-class PlanAssignments(MethodView):
-    @jwt_required()
-    @workout_blp.arguments(PlanAssignmentSchema)
-    @workout_blp.response(201)
-    def post(self, data, plan_id):
-        """Attach a plan to your account with repeat metadata (schedule shell)."""
-        user=  _current_user()
-
-        plan = WorkoutPlans.query.filter(
-            WorkoutPlans.plan_id == plan_id,
-            WorkoutPlans.is_active == True
-        ).first()
-        
-        if not plan or not _plan_readable(plan, user.user_id):
-            abort(404, description="Plan not found.")
-            
-        repeat_raw = data.get("repeat_rule") or "none"
-        assigned_to_user_id = data.get("assigned_to_user_id") or user.user_id
-
-        if assigned_to_user_id != user.user_id:
-            coach_profile = CoachProfiles.query.filter_by(
-                user_id=user.user_id
-            ).first()
-
-            if not coach_profile:
-                abort(403, "Only coaches can assign to clients")
-
-            rel = CoachClientRelationships.query.filter_by(
-                coach_profile_id=coach_profile.coach_profile_id,
-                client_user_id=assigned_to_user_id,
-                status=status_enum.active
-            ).first()
-
-            if not rel:
-                abort(403, "Not your client")
-
-            assignment_type = AssignmentTypeEnum.coach
-        else:
-            assignment_type = AssignmentTypeEnum.self
-        
-        try:
-            repeat_rule = RepeatRuleEnum(repeat_raw)
-        except ValueError:
-            abort(400, description="Invalid repeat_rule.")
-        row = WorkoutPlanAssignments(
-            plan_id=plan.plan_id,
-            assigned_to_user_id=assigned_to_user_id,
-            assigned_by_user_id=user.user_id,
-            assignment_type=assignment_type,
-            start_date=data.get("start_date"),
-            end_date=data.get("end_date"),
-            repeat_rule=repeat_rule,
-            status=AssignmentStatusEnum.active,
-        )
-        db.session.add(row)
-        db.session.flush() 
-        try:
-            # _generate_calendar_from_assignment(row)
-
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            abort(500, description=str(e))
-        return {
-            "assignment_id": row.assignment_id,
-            "plan_id": row.plan_id,
-            "assigned_to_user_id": row.assigned_to_user_id,
-            "repeat_rule": row.repeat_rule.value if row.repeat_rule else None,
-            "start_date": row.start_date.isoformat() if row.start_date else None,
-            "end_date": row.end_date.isoformat() if row.end_date else None,
-            "status": row.status.value if row.status else None,
-        }
 
 
 @workout_blp.route("/plans/scheduled")
@@ -1277,24 +1289,24 @@ class MyAssignments(MethodView):
                 ]
 
                 # calendar workouts (THIS IS THE KEY PART)
-                sessions = CalendarWorkouts.query.filter_by(
-                    plan_day_id=d.plan_day_id,
-                    for_user_id=user.user_id
-                ).order_by(CalendarWorkouts.scheduled_start.asc()).all()
+                # sessions = CalendarWorkouts.query.filter_by(
+                #     plan_day_id=d.plan_day_id,
+                #     for_user_id=user.user_id
+                # ).order_by(CalendarWorkouts.scheduled_start.asc()).all()
 
                 plan_days.append({
                     "plan_day_id": d.plan_day_id,
                     "day_label": d.day_label,
                     "exercises": exercises,
-                    "sessions": [
-                        {
-                            "calendar_workout_id": s.calendar_workout_id,
-                            "scheduled_start": s.scheduled_start,
-                            "scheduled_end": s.scheduled_end,
-                            "status": s.status
-                        }
-                        for s in sessions
-                    ]
+                    # "sessions": [
+                    #     {
+                    #         "calendar_workout_id": s.calendar_workout_id,
+                    #         "scheduled_start": s.scheduled_start,
+                    #         "scheduled_end": s.scheduled_end,
+                    #         "status": s.status
+                    #     }
+                    #     for s in sessions
+                    # ]
                 })
 
             result.append({
@@ -1835,7 +1847,7 @@ class AssignmentDetail(MethodView):
         if not assignment:
             abort(404, description="Assignment not found")
 
-        # 🔐 Authorization
+        # Authorization
         if assignment.assigned_to_user_id != user.user_id:
             coach_profile = CoachProfiles.query.filter_by(
                 user_id=user.user_id
