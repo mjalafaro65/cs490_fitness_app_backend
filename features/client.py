@@ -3,7 +3,7 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
-from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, AssignmentCancelSchema, AssignmentStatusSchema
 from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
 from models.invoices import Invoices
@@ -22,7 +22,7 @@ from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema, Initia
 from models.invoices import StatusEnumList
 from models.payments import StatusEnum_Payments
 from models.coach_hire_requests import StatusEnum
-from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes, ClientProgressPhotos
+from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes, ClientProgressPhotos, WorkoutPlanAssignments, MealPlanAssignments
 from .utils import create_notification
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
@@ -1387,3 +1387,143 @@ class ClientProgressPhotosView(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=f"Database error: {str(e)}")
+
+
+### Workout Assignment Management
+@client_blp.route("/workout-assignments/<int:assignment_id>/complete")
+class WorkoutAssignmentCompleteView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, AssignmentStatusSchema)
+    def patch(self, assignment_id):
+        """Complete a workout plan assignment"""
+        current_user = _current_user()
+        
+        assignment = WorkoutPlanAssignments.query.filter_by(
+            assignment_id=assignment_id,
+            assigned_to_user_id=current_user.user_id
+        ).first_or_404("Assignment not found or unauthorized")
+        
+        if assignment.status.value != 'active':
+            abort(400, description="Only active assignments can be completed")
+        
+        try:
+            assignment.status = AssignmentStatusEnum.completed
+            
+            # Notify coach
+            create_notification(
+                user_id=assignment.assigned_by_user_id,
+                type_slug="assignment-completed",
+                title="Workout Plan Completed",
+                body=f"Client {current_user.first_name} completed their assigned workout plan."
+            )
+            
+            db.session.commit()
+            return assignment
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Failed to complete assignment: {str(e)}")
+
+@client_blp.route("/workout-assignments/<int:assignment_id>/cancel")
+class WorkoutAssignmentCancelView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(AssignmentCancelSchema)
+    @client_blp.response(200, AssignmentStatusSchema)
+    def patch(self, data, assignment_id):
+        """Cancel a workout plan assignment"""
+        current_user = _current_user()
+        
+        assignment = WorkoutPlanAssignments.query.filter_by(
+            assignment_id=assignment_id,
+            assigned_to_user_id=current_user.user_id
+        ).first_or_404("Assignment not found or unauthorized")
+        
+        if assignment.status.value != 'active':
+            abort(400, description="Only active assignments can be canceled")
+        
+        try:
+            assignment.status = AssignmentStatusEnum.canceled
+            
+            # Notify coach
+            create_notification(
+                user_id=assignment.assigned_by_user_id,
+                type_slug="assignment-canceled",
+                title="Workout Plan Canceled",
+                body=f"Client {current_user.first_name} canceled their assigned workout plan."
+            )
+            
+            db.session.commit()
+            return assignment
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Failed to cancel assignment: {str(e)}")
+
+
+### Meal Assignment Management
+@client_blp.route("/meal-assignments/<int:assignment_id>/complete")
+class MealAssignmentCompleteView(MethodView):
+    @jwt_required()
+    @client_blp.response(200, AssignmentStatusSchema)
+    def patch(self, assignment_id):
+        """Complete a meal plan assignment"""
+        current_user = _current_user()
+        
+        assignment = MealPlanAssignments.query.filter_by(
+            meal_plan_assignment_id=assignment_id,
+            user_id=current_user.user_id
+        ).first_or_404("Assignment not found or unauthorized")
+        
+        if assignment.status.value != 'active':
+            abort(400, description="Only active assignments can be completed")
+        
+        try:
+            from models.meal_plan_assignments import StatusEnum as MealStatusEnum
+            assignment.status = MealStatusEnum.completed
+            
+            # Notify coach
+            create_notification(
+                user_id=assignment.assigned_by_user_id,
+                type_slug="assignment-completed",
+                title="Meal Plan Completed",
+                body=f"Client {current_user.first_name} completed their assigned meal plan."
+            )
+            
+            db.session.commit()
+            return assignment
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Failed to complete assignment: {str(e)}")
+
+@client_blp.route("/meal-assignments/<int:assignment_id>/cancel")
+class MealAssignmentCancelView(MethodView):
+    @jwt_required()
+    @client_blp.arguments(AssignmentCancelSchema)
+    @client_blp.response(200, AssignmentStatusSchema)
+    def patch(self, data, assignment_id):
+        """Cancel a meal plan assignment"""
+        current_user = _current_user()
+        
+        assignment = MealPlanAssignments.query.filter_by(
+            meal_plan_assignment_id=assignment_id,
+            user_id=current_user.user_id
+        ).first_or_404("Assignment not found or unauthorized")
+        
+        if assignment.status.value != 'active':
+            abort(400, description="Only active assignments can be canceled")
+        
+        try:
+            from models.meal_plan_assignments import StatusEnum as MealStatusEnum
+            assignment.status = MealStatusEnum.canceled
+            
+            # Notify coach
+            create_notification(
+                user_id=assignment.assigned_by_user_id,
+                type_slug="assignment-canceled",
+                title="Meal Plan Canceled",
+                body=f"Client {current_user.first_name} canceled their assigned meal plan."
+            )
+            
+            db.session.commit()
+            return assignment
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Failed to cancel assignment: {str(e)}")

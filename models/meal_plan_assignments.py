@@ -12,12 +12,12 @@ class RepeatEnum(enum.Enum):
 class StatusEnum(enum.Enum):
     active = 'active'
     completed = 'completed'
-    cancelled = 'cancelled'
+    canceled = 'canceled'
 
 class MealPlanAssignments(db.Model):
     __tablename__ = 'meal_plan_assignments'
     
-    assignment_id = db.Column(db.Integer, primary_key=True)
+    meal_plan_assignment_id = db.Column(db.Integer, primary_key=True)
     meal_plan_id = db.Column(db.Integer, db.ForeignKey('meal_plans.meal_plan_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
