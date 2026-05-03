@@ -19,6 +19,10 @@ class CreateMealplanSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
+class UpdateMealplanSchema(Schema):
+    name = fields.Str(required=False, validate=validate.Length(max=100))
+    description = fields.Str(required=False, allow_none=True, validate=validate.Length(max=1000))
+
 class CreateMealLogSchema(Schema):
     meal_log_id = fields.Int(dump_only=True)
     user_id = fields.Int(dump_only=True)

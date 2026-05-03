@@ -7,7 +7,7 @@ from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from models.meal_logs import MealLogs
-from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, CreateMealLogSchema, FetchMealsSchema, MealFilterArgsSchema
+from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, CreateMealLogSchema, FetchMealsSchema, MealFilterArgsSchema, UpdateMealplanSchema
 from models.meals import Meals
 
 nutrition_bp = Blueprint('Nutrition', __name__, url_prefix="/nutrition", description='Nutrition features')
@@ -32,7 +32,6 @@ class MealPlanList(MethodView):
         return meal_plans
    
     @jwt_required()
-   
     @nutrition_bp.arguments(CreateMealplanSchema)
     @nutrition_bp.response(201, CreateMealplanSchema)
     def post(self, data):
@@ -57,10 +56,68 @@ class MealPlanList(MethodView):
             db.session.rollback()
             abort(500, description="Could not create meal plan.")
 
+### User can edit a meal plan
+@nutrition_bp.route('/mealplans/<int:meal_plan_id>')
+class MealPlanDetails(MethodView):
+    @jwt_required()
+    @nutrition_bp.arguments(UpdateMealplanSchema)
+    @nutrition_bp.response(200, CreateMealplanSchema)
+    def patch(self, data, meal_plan_id):
+        auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=auth_id).first()
+        if not user:
+            abort(404, description="User not found.")
+
+        meal_plan = MealPlans.query.filter_by(
+            meal_plan_id=meal_plan_id,
+            owner_user_id=user.user_id
+        ).first()
+
+        if not meal_plan:
+            abort(404, description="Meal plan not found or you do not have permission to edit it.")
+
+        if 'name' in data:
+            meal_plan.name = data['name']
+        if 'description' in data:
+            meal_plan.description = data['description']
+
+        meal_plan.updated_at = datetime.utcnow()
+
+        try:
+            db.session.commit()
+            return meal_plan
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Could not update meal plan: {str(e)}")
+
+    ### User can delete a meal plan
+    @jwt_required()
+    @nutrition_bp.response(200)
+    def delete(self, meal_plan_id):
+        auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=auth_id).first()
+        if not user:
+            abort(404, description="User not found.")
+
+        meal_plan = MealPlans.query.filter_by(
+            meal_plan_id=meal_plan_id,
+            owner_user_id=user.user_id
+        ).first()
+
+        if not meal_plan:
+            abort(404, description="Meal plan not found or you do not have permission to delete it.")
+
+        try:
+            db.session.delete(meal_plan)
+            db.session.commit()
+            return {"message": f"Meal plan {meal_plan_id} successfully deleted."}, 200
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Could not delete meal plan: {str(e)}")
+
 @nutrition_bp.route('/meal-logs')
 class CreateMealLog(MethodView):
     @jwt_required()
-   
     @nutrition_bp.arguments(CreateMealLogSchema)
     @nutrition_bp.response(201, CreateMealLogSchema)
     def post(self, data):
@@ -91,7 +148,6 @@ class CreateMealLog(MethodView):
             
     @jwt_required()
     @nutrition_bp.response(201, CreateMealLogSchema(many=True))
-
     def get(self):
         """
         User can get all their meal log
@@ -104,6 +160,45 @@ class CreateMealLog(MethodView):
 
         return logs, 200
 
+### Possibly unneeded
+"""
+### Allows user to edit a meal log
+@nutrition_bp.route('/meal-logs/<int:meal_log_id>')
+class EditMealLog(MethodView):
+    @jwt_required()
+    @nutrition_bp.arguments(UpdateMealLogSchema)
+    @nutrition_bp.response(200, CreateMealLogSchema)
+    def patch(self, data, meal_log_id):
+        
+        auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=auth_id).first()
+        if not user:
+            abort(404, description="User not found")
+
+        ### Hardcoded user for testing
+        user = Users.query.first()
+        meal_log = MealLogs.query.filter_by(
+            meal_log_id=meal_log_id, 
+            user_id=user.user_id
+        ).first()
+
+        if not meal_log:
+            abort(404, description="Meal log not found or you do not have permission to edit it.")
+
+        if 'servings' in data:
+            meal_log.servings = data['servings']
+        if 'calories' in data:
+            meal_log.calories = data['calories']
+        if 'notes' in data:
+            meal_log.notes = data['notes']
+
+        try:
+            db.session.commit()
+            return meal_log
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=f"Could not update meal log: {str(e)}")
+"""
     
 @nutrition_bp.route('/meal-logs/<int:log_id>')
 class MealLogUpdate(MethodView):
