@@ -137,3 +137,14 @@ class EditGoalSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
     description = fields.Str(validate=validate.Length(max=1000))
+
+class AssignmentCancelSchema(Schema):
+    reason = fields.Str(required=False, validate=validate.Length(max=500))
+
+class AssignmentStatusSchema(Schema):
+    assignment_id = fields.Int(dump_only=True)
+    plan_id = fields.Int(dump_only=True)
+    assigned_to_user_id = fields.Int(dump_only=True)
+    assigned_by_user_id = fields.Int(dump_only=True)
+    status = fields.Str(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
