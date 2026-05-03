@@ -6,6 +6,10 @@ class RegisterSchema(Schema):
     email = fields.Email(required=True)
     password = fields.Str(required=True, validate=lambda p: len(p) >= 6)
 
+class UpdateEmailSchema(Schema):
+    new_email = fields.Email(required=True)
+    current_password = fields.Str(required=True, load_only=True)
+
 class UserSetupSchema(Schema):
     # shared info
     first_name = fields.Str(validate=validate.Length(min=1), required=True)

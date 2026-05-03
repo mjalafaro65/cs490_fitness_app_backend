@@ -7,11 +7,12 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from db import db
 from models import UserAuths, UserRoles, Roles, Users
 from middleware import roles_required 
-from schemas.auth_schema import RegisterSchema, UserSetupSchema
+from schemas.auth_schema import RegisterSchema, UserSetupSchema, UpdateEmailSchema
 from flask import jsonify
-from models.coach_profiles import CoachProfiles # Ensure this path is correct
+from models.coach_profiles import CoachProfiles
 from models import Users, ClientProfiles, CoachProfiles, UserLoginActivity
 from .utils import create_notification
+from werkzeug.security import check_password_hash
 
 auth_blp = Blueprint("Authentication", __name__, url_prefix="/auth", description="Operations for User Auth")
 
@@ -51,6 +52,36 @@ class UserRegister(MethodView):
         except Exception as e:
             db.session.rollback()
             return {"message": f"Registration failed at role assignment: {str(e)}"}, 500
+
+@auth_blp.route("/update-email")
+class UpdateEmail(MethodView):
+    @jwt_required()
+    @auth_blp.arguments(UpdateEmailSchema)
+    @auth_blp.response(200)
+    def patch(self, data):
+        current_auth_id = get_jwt_identity()
+        user_auth = UserAuths.query.filter_by(auth_id=current_auth_id).first()
+
+        if not user_auth:
+            abort(404, description="User not found.")
+
+        if not check_password_hash(user_auth.password, data['current_password']):       
+            abort(401, message="Incorrect password.")
+
+        existing_email = UserAuths.query.filter_by(email=data['new_email']).first()
+        if existing_email:
+            abort(409, description="That email address is already in use.")
+
+        user_auth.email = data['new_email']
+
+        try:
+            db.session.commit()
+            return {"message": "Email updated successfully."}, 200
+        except Exception as e:
+            db.session.rollback()
+            print(f"Database error updating email: {str(e)}")
+            abort(500, description="Failed to update email. Please try again.")
+
 
 @auth_blp.route("/setup")
 class UserSetup(MethodView):
