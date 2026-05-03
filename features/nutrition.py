@@ -232,6 +232,7 @@ class CoachAllClientLogs(MethodView):
         return logs, 200
     
 ### Fetchs all meals
+### Filters by type, calories, carbs, protein, fats
 @nutrition_bp.route('/fetch-meals')
 class FetchMeals(MethodView):
     @nutrition_bp.arguments(MealFilterArgsSchema, location="query")
@@ -247,5 +248,14 @@ class FetchMeals(MethodView):
 
         if "max_calories" in args:
             query = query.filter(Meals.calories <= args["max_calories"])
+
+        if "min_protein" in args:
+            query = query.filter(Meals.protein_g >= args["min_protein"])
+
+        if "min_carbs" in args:
+            query = query.filter(Meals.carbs_g >= args["min_carbs"])
+
+        if "max_fats" in args:
+            query = query.filter(Meals.fats_g <= args["max_fats"])
 
         return query.order_by(Meals.created_at.desc()).all()
