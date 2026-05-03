@@ -7,7 +7,8 @@ from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from models.meal_logs import MealLogs
-from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, CreateMealLogSchema
+from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, CreateMealLogSchema, FetchMealsSchema, MealFilterArgsSchema
+from models.meals import Meals
 
 nutrition_bp = Blueprint('Nutrition', __name__, url_prefix="/nutrition", description='Nutrition features')
 
@@ -127,7 +128,6 @@ class MealLogUpdate(MethodView):
     
     @jwt_required()
     @nutrition_bp.response(201, CreateMealLogSchema)
-
     def put(self, log_id):
         """
         Update one meal log
@@ -231,3 +231,21 @@ class CoachAllClientLogs(MethodView):
 
         return logs, 200
     
+### Fetchs all meals
+@nutrition_bp.route('/fetch-meals')
+class FetchMeals(MethodView):
+    @nutrition_bp.arguments(MealFilterArgsSchema, location="query")
+    @nutrition_bp.response(200, FetchMealsSchema(many=True))
+    def get(self, args):
+        query = Meals.query.filter_by(is_active=True)
+
+        if "meal_type" in args:
+            query = query.filter(Meals.meal_type == args["meal_type"])
+
+        if "min_calories" in args:
+            query = query.filter(Meals.calories >= args["min_calories"])
+
+        if "max_calories" in args:
+            query = query.filter(Meals.calories <= args["max_calories"])
+
+        return query.order_by(Meals.created_at.desc()).all()

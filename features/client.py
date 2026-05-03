@@ -3,6 +3,7 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, ReviewFilterSchema
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, AssignmentCancelSchema, AssignmentStatusSchema
 from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
@@ -469,7 +470,6 @@ class ReviewCoachView(MethodView):
     @client_blp.response(200, ReviewCoachSchema)
     def post(self, data, coach_id):
         current_auth_id = get_jwt_identity()
-
         user = Users.query.filter_by(auth_id=current_auth_id).first()
         if not user:
             abort(404, description="User record not found.")
@@ -499,7 +499,8 @@ class ReviewCoachView(MethodView):
             coach_profile_id=coach_id,
             client_user_id=user.user_id,
             rating=data['rating'],
-            comment=data.get('comment')
+            comment=data.get('comment'),
+            created_at=datetime.utcnow()
         )
 
         try:
@@ -510,6 +511,53 @@ class ReviewCoachView(MethodView):
             db.session.rollback()
             print(f"Database error in review submission: {str(e)}")
             abort(500, description="Failed to submit review. Please try again.")
+
+    #@jwt_required()
+    @client_blp.arguments(ReviewFilterSchema, location="query")
+    @client_blp.response(200, ReviewCoachSchema(many=True))
+    def get(self, args, coach_id):
+        """Fetch all reviews for a coach, optionally filtered by rating"""
+        
+        
+        coach = CoachProfiles.query.get(coach_id)
+        if not coach:
+            abort(404, description="Coach profile not found.")
+
+        
+        query = CoachReviews.query.filter_by(coach_profile_id=coach_id)
+
+        
+        if "rating" in args:
+            query = query.filter(CoachReviews.rating == args["rating"])
+
+        
+        return query.order_by(CoachReviews.created_at.desc()).all()
+    
+    @jwt_required()
+    def delete(self, coach_id):
+        """Delete a client's review for a specific coach"""
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+        if not user:
+            abort(404, description="User record not found.")
+
+        review = CoachReviews.query.filter_by(
+            coach_profile_id=coach_id,
+            client_user_id=user.user_id
+        ).first()
+
+        if not review:
+            abort(404, description="You have not reviewed this coach, so there is nothing to delete.")
+
+        try:
+            db.session.delete(review)
+            db.session.commit()
+            return {"message": "Review deleted successfully."}, 200
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Database error in review deletion: {str(e)}")
+            abort(500, description="Failed to delete review. Please try again.")
 
 ### Manage Personal Reviews
 @client_blp.route("/my-reviews")

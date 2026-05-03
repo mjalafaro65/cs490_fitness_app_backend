@@ -70,7 +70,9 @@ class HireRequestListSchema(Schema):
     created_at = fields.DateTime()
     decided_at = fields.DateTime(allow_none=True)
     
-    
+class ReviewFilterSchema(Schema):
+    rating = fields.Int(validate=validate.Range(min=1, max=5))
+
 class ReviewCoachSchema(Schema):
     ### For editing reviews
     review_id = fields.Int(dump_only=True)
@@ -81,6 +83,7 @@ class ReviewCoachSchema(Schema):
     helpful_count = fields.Int(dump_only=True)
     unhelpful_count = fields.Int(dump_only=True)
     user_interaction = fields.Str(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
 
 
 class ReportCoachSchema(Schema):
