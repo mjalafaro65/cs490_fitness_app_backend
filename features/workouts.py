@@ -1514,6 +1514,33 @@ class CalendarWorkoutDetail(MethodView):
     #         "status": w.status
     #     }
 
+# possible endpoint
+@workout_blp.route("/assignments/<int:assignment_id>/calendar")
+class AssignmentCalendar(MethodView):
+    @jwt_required()
+    def post(self, assignment_id):
+        data = request.get_json()
+        user = _current_user()
+
+        created = []
+
+        for occ in data["occurrences"]:
+            cw = CalendarWorkouts(
+                for_user_id=user.user_id,
+                assignment_id=assignment_id, 
+                day_label=occ["day_label"],  
+                scheduled_start=occ["scheduled_start"],
+                scheduled_end=occ["scheduled_end"],
+                status="scheduled",
+            )
+            db.session.add(cw)
+            db.session.flush()
+            created.append(cw.calendar_workout_id)
+
+        db.session.commit()
+        return {"calendar_workout_ids": created}
+    
+    
 
 def check_assignment_completion(user_id, calendar_workout):
     # get assignment for this workout via plan_day
