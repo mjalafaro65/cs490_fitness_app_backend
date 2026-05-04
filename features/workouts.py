@@ -1251,6 +1251,8 @@ class PlanCalendar(MethodView):
             abort(500, description=str(e))
         return {"calendar_workout_ids": created}
     
+
+    
 @workout_blp.route("/assignments/mine")
 class MyAssignments(MethodView):
 
@@ -1684,7 +1686,6 @@ class MyWorkoutLogs(MethodView):
         if is_client:
             # clients can only see themselves
             target_user_id = user.user_id
-
         elif is_coach:
             # coaches can see a specific client
             coach_profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
@@ -1714,8 +1715,6 @@ class MyWorkoutLogs(MethodView):
             query = query.filter(
                 WorkoutLogs.calendar_workout_id == calendar_workout_id
             )
-
-       
 
 
         logs = query.all()
@@ -1928,3 +1927,60 @@ class CalendarWorkoutDetail(MethodView):
             "scheduled_start": w.scheduled_start,
             "scheduled_end": w.scheduled_end
         }
+        
+@workout_blp.route("/assignments/<int:assignment_id>/schedule")
+class AssignmentSchedule(MethodView):
+    @jwt_required()
+    @workout_blp.arguments(PlanCalendarSchema)
+    @workout_blp.response(201)
+    def post(self, data, assignment_id):
+        """Client schedules calendar sessions for their assignment."""
+        user = _current_user()
+
+        assignment = WorkoutPlanAssignments.query.filter_by(
+            assignment_id=assignment_id,
+            assigned_to_user_id=user.user_id,
+            status=AssignmentStatusEnum.active
+        ).first()
+        if not assignment:
+            abort(404, description="Assignment not found.")
+
+        plan = WorkoutPlans.query.filter_by(
+            plan_id=assignment.plan_id,
+            is_active=True
+        ).first()
+        if not plan:
+            abort(404, description="Plan not found.")
+
+        created = []
+        for occ in data["occurrences"]:
+            pid = occ["plan_day_id"]
+
+            # make sure the day belongs to this assignment's plan
+            day = WorkoutPlanDays.query.filter_by(
+                plan_day_id=pid,
+                plan_id=assignment.plan_id
+            ).first()
+            if not day:
+                abort(400, description=f"plan_day_id {pid} does not belong to this assignment.")
+
+            cw = CalendarWorkouts(
+                assignment_id=assignment.assignment_id,
+                for_user_id=user.user_id,
+                plan_day_id=pid,
+                coach_id=assignment.assigned_by_user_id,
+                scheduled_start=occ["scheduled_start"],
+                scheduled_end=occ["scheduled_end"],
+                status="scheduled",
+            )
+            db.session.add(cw)
+            db.session.flush()
+            created.append(cw.calendar_workout_id)
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+
+        return {"calendar_workout_ids": created}
