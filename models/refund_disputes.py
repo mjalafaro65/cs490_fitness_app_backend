@@ -15,7 +15,6 @@ class RefundDisputes(db.Model):
     refund_dispute_id = db.Column(db.Integer, primary_key=True)
     payment_id = db.Column(db.Integer, db.ForeignKey('payments.payment_id'), nullable=False)
     opened_by_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    #cascade_delete = db.relationship("TargetClassName", cascade="all, delete-orphan")#
     reason = db.Column(db.String(255), nullable=False)
     status = db.Column(db.Enum(StatusEnum_Disputes), nullable=False, default=StatusEnum_Disputes.open)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
