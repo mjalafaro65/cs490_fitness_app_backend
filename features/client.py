@@ -530,31 +530,31 @@ class ReviewCoachView(MethodView):
         
         return query.order_by(CoachReviews.created_at.desc()).all()
     
-    @jwt_required()
-    def delete(self, coach_id):
-        """Delete a client's review for a specific coach"""
-        current_auth_id = get_jwt_identity()
-        user = Users.query.filter_by(auth_id=current_auth_id).first()
-        if not user:
-            abort(404, description="User record not found.")
+    # @jwt_required()
+    # def delete(self, coach_id):
+    #     """Delete a client's review for a specific coach"""
+    #     current_auth_id = get_jwt_identity()
+    #     user = Users.query.filter_by(auth_id=current_auth_id).first()
+    #     if not user:
+    #         abort(404, description="User record not found.")
 
-        review = CoachReviews.query.filter_by(
-            coach_profile_id=coach_id,
-            client_user_id=user.user_id
-        ).first()
+    #     review = CoachReviews.query.filter_by(
+    #         coach_profile_id=coach_id,
+    #         client_user_id=user.user_id
+    #     ).first()
 
-        if not review:
-            abort(404, description="You have not reviewed this coach, so there is nothing to delete.")
+    #     if not review:
+    #         abort(404, description="You have not reviewed this coach, so there is nothing to delete.")
 
-        try:
-            db.session.delete(review)
-            db.session.commit()
-            return {"message": "Review deleted successfully."}, 200
+    #     try:
+    #         db.session.delete(review)
+    #         db.session.commit()
+    #         return {"message": "Review deleted successfully."}, 200
             
-        except Exception as e:
-            db.session.rollback()
-            print(f"Database error in review deletion: {str(e)}")
-            abort(500, description="Failed to delete review. Please try again.")
+    #     except Exception as e:
+    #         db.session.rollback()
+    #         print(f"Database error in review deletion: {str(e)}")
+    #         abort(500, description="Failed to delete review. Please try again.")
 
 ### Manage Personal Reviews
 @client_blp.route("/my-reviews")
@@ -604,6 +604,22 @@ class EditReviewView(MethodView):
 
         db.session.commit()
         return review
+    
+
+    @jwt_required()
+    def delete(self, review_id):
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first()
+
+        review = CoachReviews.query.filter_by(
+            review_id=review_id,
+            client_user_id=user.user_id
+        ).first_or_404()
+
+        db.session.delete(review)
+        db.session.commit()
+
+        return {"message": "Review deleted"}, 200
 
 ### Coach Favorites Management
 @client_blp.route("/favorites/coaches/<int:coach_id>")

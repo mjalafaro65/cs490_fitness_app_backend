@@ -28,6 +28,6 @@ class WorkoutPlanAssignments(db.Model):
     assignment_type = db.Column(db.Enum(AssignmentTypeEnum), nullable=False)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
-    repeat_rule = db.Column(db.Enum(RepeatRuleEnum))
+    # repeat_rule = db.Column(db.Enum(RepeatRuleEnum))
     status = db.Column(db.Enum(AssignmentStatusEnum))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
