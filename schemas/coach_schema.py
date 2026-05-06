@@ -212,6 +212,86 @@ class ClientListSchema(Schema):
     clients = fields.List(fields.Nested(ClientDashboardSchema))
 
 
+# Full Client Dashboard Schema for Coach View
+class ClientProfileSchema(Schema):
+    client_id = fields.Int(dump_only=True)
+    bio = fields.Str(dump_only=True)
+    age = fields.Int(dump_only=True)
+    height = fields.Float(dump_only=True)
+    weight = fields.Float(dump_only=True)
+    fitness_goals = fields.Str(dump_only=True)
+    activity_level = fields.Str(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+
+
+class WorkoutAssignmentSchema(Schema):
+    assignment_id = fields.Int(dump_only=True)
+    plan_id = fields.Int(dump_only=True)
+    plan_name = fields.Str(dump_only=True)
+    status = fields.Str(dump_only=True)
+    start_date = fields.Date(dump_only=True)
+    end_date = fields.Date(dump_only=True, allow_none=True)
+    days = fields.List(fields.Dict(), dump_only=True)
+
+
+class MealAssignmentSchema(Schema):
+    meal_plan_assignment_id = fields.Int(dump_only=True)
+    plan_id = fields.Int(dump_only=True)
+    plan_name = fields.Str(dump_only=True)
+    status = fields.Str(dump_only=True)
+    start_date = fields.Date(dump_only=True)
+    end_date = fields.Date(dump_only=True, allow_none=True)
+
+
+class InvoiceSchema(Schema):
+    invoice_id = fields.Int(dump_only=True)
+    amount = fields.Decimal(as_string=True, dump_only=True)
+    status = fields.Str(dump_only=True)
+    due_date = fields.DateTime(dump_only=True)
+    created_at = fields.DateTime(dump_only=True)
+
+
+class PaymentSchema(Schema):
+    payment_id = fields.Int(dump_only=True)
+    amount = fields.Decimal(as_string=True, dump_only=True)
+    status = fields.Str(dump_only=True)
+    payment_date = fields.DateTime(dump_only=True)
+
+
+class CoachInfoSchema(Schema):
+    coach_profile_id = fields.Int(dump_only=True)
+    first_name = fields.Str(dump_only=True)
+    last_name = fields.Str(dump_only=True)
+    relationship_status = fields.Str(dump_only=True)
+    started_at = fields.DateTime(dump_only=True)
+
+
+class ProgressPhotoSchema(Schema):
+    photo_id = fields.Int(dump_only=True)
+    photo_url = fields.Str(dump_only=True)
+    upload_date = fields.DateTime(dump_only=True)
+
+
+class SurveyStatusSchema(Schema):
+    completed = fields.Bool(dump_only=True)
+    last_completed = fields.DateTime(dump_only=True, allow_none=True)
+
+
+class FullClientDashboardSchema(Schema):
+    client_info = fields.Nested(ClientBasicInfoSchema)
+    profile = fields.Nested(ClientProfileSchema, allow_none=True)
+    progress_summary = fields.Nested(ProgressSummarySchema)
+    recent_activity = fields.List(fields.Nested(RecentActivitySchema))
+    goals_status = fields.List(fields.Nested(GoalStatusSchema))
+    workout_assignments = fields.List(fields.Nested(WorkoutAssignmentSchema))
+    meal_assignments = fields.List(fields.Nested(MealAssignmentSchema))
+    invoices = fields.List(fields.Nested(InvoiceSchema))
+    payments = fields.List(fields.Nested(PaymentSchema))
+    coaches = fields.List(fields.Nested(CoachInfoSchema))
+    progress_photos = fields.List(fields.Nested(ProgressPhotoSchema))
+    survey_status = fields.Nested(SurveyStatusSchema)
+
+
 #class CoachFiltering(Schema):
 #    pass
 

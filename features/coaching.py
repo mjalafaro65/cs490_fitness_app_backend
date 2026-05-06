@@ -32,7 +32,7 @@ from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, C
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema, PaymentPlanSchema
+from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema, PaymentPlanSchema, FullClientDashboardSchema
 from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
 
@@ -1996,6 +1996,185 @@ def get_goals_status(client_user_id):
     
     return goals_status
 
+def get_client_profile(client_user_id):
+    """Get client profile data"""
+    from models import ClientProfiles
+    profile = ClientProfiles.query.filter_by(client_id=client_user_id).first()
+    if not profile:
+        return None
+    
+    return {
+        'client_id': profile.client_id,
+        'bio': profile.bio,
+        'age': profile.age,
+        'height': profile.height,
+        'weight': profile.weight,
+        'fitness_goals': profile.fitness_goals,
+        'activity_level': profile.activity_level,
+        'created_at': profile.created_at
+    }
+
+def get_client_workout_assignments(client_user_id):
+    """Get client's workout assignments"""
+    from models.workout_plan_assignments import AssignmentStatusEnum
+    
+    assignments = WorkoutPlanAssignments.query.filter_by(
+        assigned_to_user_id=client_user_id,
+        status=AssignmentStatusEnum.active
+    ).all()
+    
+    result = []
+    for a in assignments:
+        plan = WorkoutPlans.query.get(a.plan_id)
+        if not plan:
+            continue
+        
+        days = WorkoutPlanDays.query.filter_by(plan_id=plan.plan_id).all()
+        plan_days = []
+        for d in days:
+            exercises = WorkoutPlanDayExercises.query.filter_by(day_id=d.plan_day_id).all()
+            plan_days.append({
+                "plan_day_id": d.plan_day_id,
+                "day_label": d.day_label,
+                "exercises": [
+                    {
+                        "exercise_id": l.exercise_id,
+                        "sets": l.sets,
+                        "reps": l.reps
+                    }
+                    for l in exercises
+                ]
+            })
+        
+        result.append({
+            'assignment_id': a.assignment_id,
+            'plan_id': a.plan_id,
+            'plan_name': plan.name,
+            'status': a.status.value,
+            'start_date': a.start_date,
+            'end_date': a.end_date,
+            'days': plan_days
+        })
+    
+    return result
+
+def get_client_meal_assignments(client_user_id):
+    """Get client's meal assignments"""
+    from models.meal_plan_assignments import StatusEnum as MealStatusEnum
+    
+    assignments = MealPlanAssignments.query.filter_by(
+        user_id=client_user_id,
+        status=MealStatusEnum.active
+    ).all()
+    
+    result = []
+    for a in assignments:
+        from models import MealPlans
+        plan = MealPlans.query.get(a.plan_id)
+        if not plan:
+            continue
+            
+        result.append({
+            'meal_plan_assignment_id': a.meal_plan_assignment_id,
+            'plan_id': a.plan_id,
+            'plan_name': plan.name if hasattr(plan, 'name') else f"Meal Plan {a.plan_id}",
+            'status': a.status.value,
+            'start_date': a.start_date,
+            'end_date': a.end_date
+        })
+    
+    return result
+
+def get_client_invoices(client_user_id):
+    """Get client's recent invoices"""
+    invoices = Invoices.query.filter_by(client_user_id=client_user_id).order_by(
+        Invoices.created_at.desc()
+    ).limit(10).all()
+    
+    return [
+        {
+            'invoice_id': inv.invoice_id,
+            'amount': inv.amount,
+            'status': inv.status.value,
+            'due_date': inv.due_date,
+            'created_at': inv.created_at
+        }
+        for inv in invoices
+    ]
+
+def get_client_payments(client_user_id):
+    """Get client's payment history"""
+    payments = Payments.query.filter_by(client_user_id=client_user_id).order_by(
+        Payments.payment_date.desc()
+    ).limit(10).all()
+    
+    return [
+        {
+            'payment_id': p.payment_id,
+            'amount': p.amount,
+            'status': p.status.value,
+            'payment_date': p.payment_date
+        }
+        for p in payments
+    ]
+
+def get_client_coaches(client_user_id):
+    """Get client's current coaches"""
+    relationships = CoachClientRelationships.query.filter_by(
+        client_user_id=client_user_id,
+        status=status_enum.active
+    ).all()
+    
+    result = []
+    for rel in relationships:
+        coach = CoachProfiles.query.get(rel.coach_profile_id)
+        if not coach:
+            continue
+        coach_user = Users.query.get(coach.user_id)
+        if not coach_user:
+            continue
+            
+        result.append({
+            'coach_profile_id': coach.coach_profile_id,
+            'first_name': coach_user.first_name,
+            'last_name': coach_user.last_name,
+            'relationship_status': rel.status.value,
+            'started_at': rel.started_at
+        })
+    
+    return result
+
+def get_client_progress_photos(client_user_id):
+    """Get client's progress photos"""
+    from models import ClientProgressPhotos
+    photos = ClientProgressPhotos.query.filter_by(
+        client_id=client_user_id
+    ).order_by(ClientProgressPhotos.upload_date.desc()).limit(10).all()
+    
+    return [
+        {
+            'photo_id': p.photo_id,
+            'photo_url': p.photo_url,
+            'upload_date': p.upload_date
+        }
+        for p in photos
+    ]
+
+def get_client_survey_status(client_user_id):
+    """Get client's daily survey status"""
+    from datetime import date
+    today = date.today()
+    
+    survey = DailySurvey.query.filter_by(
+        user_id=client_user_id,
+        date=today
+    ).first()
+    
+    return {
+        'completed': survey is not None,
+        'last_completed': survey.created_at if survey else None
+    }
+
 # Dashboard Endpoints
 @coach_blp.route("/dashboard/clients")
 class CoachClientDashboard(MethodView):
@@ -2052,9 +2231,9 @@ class CoachClientDashboard(MethodView):
 @coach_blp.route("/dashboard/clients/<int:client_id>/progress")
 class ClientProgressDetail(MethodView):
     @jwt_required()
-    @coach_blp.response(200, ClientDashboardSchema)
+    @coach_blp.response(200, FullClientDashboardSchema)
     def get(self, client_id):
-        """Get detailed progress data for specific client"""
+        """Get full client dashboard data as client would see it"""
         coach_user_id = get_jwt_identity()
         coach_user = Users.query.filter_by(auth_id=coach_user_id).first()
         
@@ -2080,10 +2259,20 @@ class ClientProgressDetail(MethodView):
         if not relationship:
             abort(404, description="Client relationship not found.")
         
-        # Calculate detailed progress
+        # Get all client dashboard data
         progress_summary = calculate_progress_summary(client_user.user_id, days=90)
         recent_activity = get_recent_activity(client_user.user_id, days=30)
         goals_status = get_goals_status(client_user.user_id)
+        
+        # Get additional client data for full dashboard view
+        profile = get_client_profile(client_user.user_id)
+        workout_assignments = get_client_workout_assignments(client_user.user_id)
+        meal_assignments = get_client_meal_assignments(client_user.user_id)
+        invoices = get_client_invoices(client_user.user_id)
+        payments = get_client_payments(client_user.user_id)
+        coaches = get_client_coaches(client_user.user_id)
+        progress_photos = get_client_progress_photos(client_user.user_id)
+        survey_status = get_client_survey_status(client_user.user_id)
         
         return {
             'client_info': {
@@ -2093,7 +2282,15 @@ class ClientProgressDetail(MethodView):
                 'relationship_start_date': relationship.started_at,
                 'relationship_status': relationship.status.value
             },
+            'profile': profile,
             'progress_summary': progress_summary,
             'recent_activity': recent_activity,
-            'goals_status': goals_status
+            'goals_status': goals_status,
+            'workout_assignments': workout_assignments,
+            'meal_assignments': meal_assignments,
+            'invoices': invoices,
+            'payments': payments,
+            'coaches': coaches,
+            'progress_photos': progress_photos,
+            'survey_status': survey_status
         }
