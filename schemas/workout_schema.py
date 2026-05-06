@@ -134,7 +134,7 @@ class PlanAssignmentSchema(Schema):
 class CalendarOccurrenceSchema(Schema):
     plan_day_id = fields.Int(required=True)
     scheduled_start = fields.DateTime(required=True)
-    scheduled_end = fields.DateTime(required=True)
+    scheduled_end = fields.DateTime(required=False)
 
 
 class PlanCalendarSchema(Schema):

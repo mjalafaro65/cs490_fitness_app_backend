@@ -99,6 +99,8 @@ class TopCoach(MethodView):
             .join(UserRoles, Users.auth_id == UserRoles.user_id)
             .filter(UserRoles.role_id == 2)
             .filter(CoachProfiles.status == 'approved') 
+            .filter(CoachProgressPhotos.before_photo_url != None) 
+            .filter(CoachProgressPhotos.after_photo_url!= None) 
             .group_by(
                 Users.user_id, 
                 Users.first_name, 
