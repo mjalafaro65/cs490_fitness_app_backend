@@ -300,6 +300,17 @@ class ClientHireRequestCreateView(MethodView):
         payment_plan_id = data["payment_plan_id"]
         auto_pay_enabled = data.get("auto_pay_enabled", False)
 
+
+        relationship_check = db.session.execute(
+            select(CoachClientRelationships).where(
+                CoachClientRelationships.client_user_id == user.user_id,
+                CoachClientRelationships.status == status_enum.active
+            )
+        ).first()
+
+        if relationship_check:
+            abort(409, description="Active coach detected. You cannot request another.")
+
         print(f"DEBUG: Processing request for User {user.user_id} -> Coach {coach_profile_id}")
 
         coach_profile = db.session.execute(
@@ -361,7 +372,7 @@ class ClientHireRequestCreateView(MethodView):
             print(f"SUCCESS: Created Request ID {new_request.request_id}")
             return new_request
         except Exception as e:
-            db.sesssion.rollback()
+            db.session.rollback()
             print(f"DATABASE ERROR: {str(e)}")
             abort(500, description="Internal database error")
 
