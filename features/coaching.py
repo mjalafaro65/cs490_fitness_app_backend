@@ -19,23 +19,22 @@ from models import(
      CoachHireRequests, 
      PaymentPlans, 
      CoachClientRelationships, 
-     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes,
+     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes, MealLogs, MealPlans, WorkoutLogs, Goals
      
      )
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
-from schemas.client_schema import ReviewCoachSchema
+
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
 from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema, PaymentPlanSchema
-from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema
+from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema, ReviewCoachSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
-
 from models.coach_hire_requests import StatusEnum
 from models.invoices import StatusEnumList
 from models.coach_profiles import ApprovalStatusEnum
@@ -138,53 +137,6 @@ class TopCoach(MethodView):
 
         except Exception as e:
             abort(500, description=f"Failed to fetch coaches: {str(e)}")
-
-# @coach_blp.route("/profile")
-# class CoachProfileView(MethodView):
-#     @jwt_required()
-#     @coach_blp.response(200, CoachProfileSchema)
-#     def get(self):
-#         """Retrieve the authenticated coach's profile details."""
-#         auth_id = get_jwt_identity()
-#         user = Users.query.filter_by(auth_id=auth_id).first()
-        
-#         if not user:
-#             abort(404, description="User not found.")
-
-#         profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
-#         if not profile:
-#             abort(404, description="Coach profile not found. Please complete setup first.")
-            
-#         return profile
-
-#     @jwt_required()
-#     @coach_blp.arguments(CoachProfileSchema)
-#     @coach_blp.response(200, CoachProfileSchema)
-#     def put(self, data):
-#         """Update existing coach profile fields only."""
-#         auth_id = get_jwt_identity()
-#         user = Users.query.filter_by(auth_id=auth_id).first()
-        
-#         if not user:
-#             abort(404, description="User not found.")
-
-#         profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
-        
-#         # Refactored: No longer creates profile; only updates.
-#         if not profile:
-#             abort(400, description="Coach profile not found. Use /auth
-# to create your profile.")
-
-#         # Update fields dynamically
-#         for key, value in data.items():
-#             setattr(profile, key, value)
-
-#         try:
-#             db.session.commit()
-#             return profile
-#         except Exception as e:
-#             db.session.rollback()
-#             abort(500, description=f"Database error during update: {str(e)}")
 
 @coach_blp.route("/specialties")
 class InitSpecialties(MethodView):
@@ -1877,19 +1829,25 @@ def calculate_progress_summary(client_user_id, days=30):
         DailySurvey.date >= start_date
     ).all()
     
-    avg_energy = func.avg(DailySurvey.energy_level).filter(
+    avg_energy = db.session.query(
+    func.avg(DailySurvey.energy_level)
+    ).filter(
         DailySurvey.user_id == client_user_id,
         DailySurvey.date >= start_date,
         DailySurvey.energy_level.isnot(None)
     ).scalar() or 0
     
-    avg_mood = func.avg(DailySurvey.mood_score).filter(
+    avg_mood = db.session.query(
+        func.avg(DailySurvey.mood_score)
+    ).filter(
         DailySurvey.user_id == client_user_id,
         DailySurvey.date >= start_date,
         DailySurvey.mood_score.isnot(None)
     ).scalar() or 0
     
-    avg_sleep = func.avg(DailySurvey.sleep_hours).filter(
+    avg_sleep = db.session.query(
+        func.avg(DailySurvey.sleep_hours)
+    ).filter(
         DailySurvey.user_id == client_user_id,
         DailySurvey.date >= start_date,
         DailySurvey.sleep_hours.isnot(None)
@@ -1898,13 +1856,13 @@ def calculate_progress_summary(client_user_id, days=30):
     # Workout completion rate
     total_workouts = WorkoutLogs.query.filter(
         WorkoutLogs.user_id == client_user_id,
-        WorkoutLogs.created_at >= start_date
+        WorkoutLogs.logged_at >= start_date
     ).count()
     
     # Nutrition logging rate
     total_meals = MealLogs.query.filter(
         MealLogs.user_id == client_user_id,
-        MealLogs.created_at >= start_date
+        MealLogs.logged_at >= start_date
     ).count()
     
     # Goals status
@@ -1957,12 +1915,12 @@ def get_recent_activity(client_user_id, days=7):
     # Recent workouts
     workouts = WorkoutLogs.query.filter(
         WorkoutLogs.user_id == client_user_id,
-        WorkoutLogs.created_at >= start_date
-    ).order_by(WorkoutLogs.created_at.desc()).limit(5).all()
+        WorkoutLogs.logged_at >= start_date
+    ).order_by(WorkoutLogs.logged_at.desc()).limit(5).all()
     
     for workout in workouts:
         activities.append({
-            'date': workout.created_at.date(),
+            'date': workout.logged_at.date(),
             'activity_type': 'workout',
             'description': f'Workout completed',
             'details': {
