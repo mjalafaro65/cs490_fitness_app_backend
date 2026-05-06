@@ -15,3 +15,6 @@ class NotificationResponseSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     #nesting
     notification_type = fields.Nested(NotificationTypeSchema)
+
+class MarkReadSchema(Schema):
+    notification_id = fields.Int(required=True)

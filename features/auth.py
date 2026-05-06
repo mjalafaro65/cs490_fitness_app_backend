@@ -234,7 +234,14 @@ class AdminPromote(MethodView):
         try:
             db.session.add(new_assignment)
 
-                
+            create_notification(
+                user_id=auth_id,
+                role_id=coach_role.role_id,
+                type_slug="account-promotion",
+                title="Account Promotion",
+                body="Congratulations! Your account has been promoted to Coach status."
+            )  
+
             db.session.commit()
             return {"msg": f"User with auth_id {auth_id} is now a coach"}, 200
         
