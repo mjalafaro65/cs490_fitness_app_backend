@@ -951,6 +951,7 @@ class PayInvoice(MethodView):
         
         create_notification(
             user_id=coach_profile.user_id,
+            role_id=2,
             type_slug="payment-received",
             title="Payment Received",
             body=f"Client {client_user.first_name} paid invoice #{invoice.invoice_id} for ${invoice.subtotal}."
