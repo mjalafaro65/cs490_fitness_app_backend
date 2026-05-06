@@ -486,14 +486,16 @@ class ReviewCoachView(MethodView):
         if not coach:
             abort(404, description="Coach profile not found.")
 
-        # TEMPORARILY DISABLED: Check if client has a relationship with the coach (active or terminated)
-        # relationship = CoachClientRelationships.query.filter_by(
-        #     coach_profile_id=coach_id,
-        #     client_user_id=user.user_id
-        # ).first()
+        relationship = db.session.execute(
+            select(CoachClientRelationships).where(
+                CoachClientRelationships.client_user_id == user.user_id,
+                CoachClientRelationships.coach_profile_id == coach_id,
+                CoachClientRelationships.status.in_([status_enum.active, status_enum.terminated])
+            )
+        ).scalar_one_or_none()
 
-        # if not relationship:
-        #     abort(403, description="You can only review coaches you have hired or previously worked with.")
+        if not relationship:
+            abort(403, description="You can only review coaches you have hired or previously worked with.")
 
         existing_review = CoachReviews.query.filter_by(
             coach_profile_id=coach_id,
