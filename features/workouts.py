@@ -1477,102 +1477,28 @@ class CalendarWorkoutDetail(MethodView):
 
             "exercises": exercises
         }
-    # @jwt_required()
-    # @workout_blp.arguments(CalendarWorkoutUpdateSchema)
-    # @workout_blp.response(200)
-    # def patch(self, data, calendar_workout_id):
-    #     user = _current_user()
 
-    #     w = CalendarWorkouts.query.filter_by(
-    #         calendar_workout_id=calendar_workout_id,
-    #         for_user_id=user.user_id
-    #     ).first()
-
-    #     if not w:
-    #         abort(404)
-
-        
-    #     if "scheduled_start" in data and "scheduled_end" in data:
-    #         if data["scheduled_end"] <= data["scheduled_start"]:
-    #             abort(400, "End must be after start")
-    #     if not w:
-    #         abort(404, description="Calendar workout not found")
-
-    #     if "status" in data and data["status"] is not None:
-    #         w.status = data["status"]
-
-    #     if "scheduled_start" in data:
-    #         w.scheduled_start = data["scheduled_start"]
-
-    #     if "scheduled_end" in data:
-    #         w.scheduled_end = data["scheduled_end"]
-
-    #     db.session.commit()
-
-    #     return {
-    #         "calendar_workout_id": w.calendar_workout_id,
-    #         "status": w.status
-    #     }
-
-# possible endpoint
-@workout_blp.route("/assignments/<int:assignment_id>/calendar")
-class AssignmentCalendar(MethodView):
-    @jwt_required()
-    def post(self, assignment_id):
-        data = request.get_json()
-        user = _current_user()
-
-        created = []
-
-        for occ in data["occurrences"]:
-            cw = CalendarWorkouts(
-                for_user_id=user.user_id,
-                assignment_id=assignment_id, 
-                day_label=occ["day_label"],  
-                scheduled_start=occ["scheduled_start"],
-                scheduled_end=occ["scheduled_end"],
-                status="scheduled",
-            )
-            db.session.add(cw)
-            db.session.flush()
-            created.append(cw.calendar_workout_id)
-
-        db.session.commit()
-        return {"calendar_workout_ids": created}
-    
-    
 
 def check_assignment_completion(user_id, calendar_workout):
     # get assignment for this workout via plan_day
-    day = WorkoutPlanDays.query.get(calendar_workout.plan_day_id)
-    if not day:
-        return
+ 
 
-    plan_id = day.plan_id
-
-    assignment = WorkoutPlanAssignments.query.filter_by(
-        assigned_to_user_id=user_id,
-        plan_id=plan_id
-    ).first()
-
-    if not assignment:
-        return
-
-    # get ALL workouts for this assignment
-    workouts = CalendarWorkouts.query.join(WorkoutPlanDays).filter(
-        WorkoutPlanDays.plan_id == plan_id,
-        CalendarWorkouts.for_user_id == user_id
+    workouts = CalendarWorkouts.query.filter(
+    CalendarWorkouts.for_user_id == user_id,
+    CalendarWorkouts.assignment_id == calendar_workout.assignment_id
     ).all()
 
     # check if any are NOT completed
-
-
-    # 2. ALL completed → complete assignment
-    if any(w.status == "scheduled" for w in workouts):
+    if not workouts:
         return
 
-    # 2. If ALL completed → complete assignment
-    if all(w.status == "completed" for w in workouts):
+
+    if any(w.status != "completed" for w in workouts):
+        return
+
+    assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
+
+    if assignment:
         assignment.status = AssignmentStatusEnum.completed
         db.session.commit()
 
@@ -1982,6 +1908,8 @@ class AssignmentSchedule(MethodView):
         created = []
         for occ in data["occurrences"]:
             pid = occ["plan_day_id"]
+            
+            
 
             # make sure the day belongs to this assignment's plan
             day = WorkoutPlanDays.query.filter_by(
@@ -1997,7 +1925,6 @@ class AssignmentSchedule(MethodView):
                 plan_day_id=pid,
                 coach_id=assignment.assigned_by_user_id,
                 scheduled_start=occ["scheduled_start"],
-                scheduled_end=occ["scheduled_end"],
                 status="scheduled",
             )
             db.session.add(cw)
