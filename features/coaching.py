@@ -19,7 +19,7 @@ from models import(
      CoachHireRequests, 
      PaymentPlans, 
      CoachClientRelationships, 
-     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes,
+     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes,Goals, WorkoutLogs, MealLogs
      
      )
 from db import db

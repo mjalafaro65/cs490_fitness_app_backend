@@ -163,11 +163,14 @@ class UserLogin(MethodView):
             else:
                 role_at_login = 1
                 
-            login_event = UserLoginActivity.query.filter_by(user_id=user.user_id).first()
+            login_event = UserLoginActivity.query.filter_by(
+                user_id=user.user_id,
+                role_at_login=role_at_login   
+            ).first()
+
             now = datetime.now(timezone.utc)
 
             if login_event:
-                # only update if it's a new day 
                 if login_event.last_active_at.date() != now.date():
                     login_event.last_active_at = now
             else:
