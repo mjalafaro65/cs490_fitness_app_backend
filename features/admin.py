@@ -12,6 +12,7 @@ from schemas.admin_schema import AdminDocumentReviewSchema, AdminCheckReviewsSch
 from schemas.user_schema import UserInfoSchema, UserQuerySchema
 from models.coach_profiles import ApprovalStatusEnum
 from models.coach_documents import StatusEnum
+from .utils import create_notification
 
 admin_blp=Blueprint("Admin", __name__, url_prefix="/admin", description="Admin features")
 
@@ -80,9 +81,21 @@ class AdminDocumentActionView(MethodView):
 
         admin_auth_id = get_jwt_identity()
         admin_user_id = db.session.query(Users.user_id).filter_by(auth_id=admin_auth_id).scalar()
+        coach_profile = CoachProfiles.query.filter_by(
+            coach_profile_id=document.coach_profile_id 
+        ).first_or_404()
         
         document.reviewed_by_admin_user_id = admin_user_id
         document.reviewed_at = datetime.now(timezone.utc)
+
+               
+        create_notification(
+            user_id=coach_profile.user_id,
+            role_id=2,
+            type_slug="coach-document-reviewed",
+            title="Coach Document Reviewed",
+            body=f"Your document has been marked as {document.status}."
+        )
 
         db.session.commit()
         return document
@@ -125,6 +138,19 @@ class AdminReviewActionView(MethodView):
 
         review.is_flagged = update_data.get('is_flagged', review.is_flagged)
         review.is_visible = update_data.get('is_visible', review.is_visible)
+
+        coach_profile = CoachProfiles.query.filter_by(
+            coach_profile_id=review.coach_profile_id
+        ).first()
+
+        if coach_profile:
+            create_notification(
+                user_id=coach_profile.user_id,
+                role_id=2, 
+                type_slug="review-moderated",
+                title="Review Moderated",
+                body="An admin has updated the status of a review on your profile."
+            )
 
         db.session.commit()
         return review
@@ -296,6 +322,17 @@ class DisableAccountView(MethodView):
         else:
             user.disabled_by_admin_user_id = None
             user.disabled_at = None
+
+
+        status_text = "disabled" if not user.is_active else "enabled"
+        
+        create_notification(
+            user_id=user.user_id,
+            role_id=user.role_id,
+            type_slug="account-status-change",
+            title=f"Account Status Change",
+            body=f"Your account has been {status_text} by an administrator."
+        )
 
         db.session.commit()
         return {"message": f"User account {'disabled' if not user.is_active else 'enabled'} successfully."}
