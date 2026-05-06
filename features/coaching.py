@@ -28,7 +28,7 @@ from sqlalchemy import func, not_, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
 from schemas.client_schema import ReviewCoachSchema
 from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises
+from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises, WorkoutLogs, MealLogs, Goals
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
@@ -1023,7 +1023,7 @@ class CoachPendingRequestsView(MethodView):
             "request_id": row.CoachHireRequests.request_id,
             "client_user_id": row.CoachHireRequests.client_user_id,
             "status": row.CoachHireRequests.status.value,
-            "created_at": row.CoachHireRequests.created_at.isoformat(),
+            "created_at": row.CoachHireRequests.created_at,
             "plan_name": row.name,          
             "billing_type": row.billing_type.value 
         } for row in results]
@@ -1070,7 +1070,7 @@ class CoachHireRequestDetailView(MethodView):
             "plan_name": result.name,
             "billing_type": result.billing_type.value,
             "status": result.CoachHireRequests.status.value,
-            "created_at": result.CoachHireRequests.created_at.isoformat()
+            "created_at": result.CoachHireRequests.created_at,
         }
     
 
@@ -1555,7 +1555,7 @@ class CoachInvoiceList(MethodView):
                     "client_name": f"{fname} {lname}",
                     "amount": float(inv.subtotal),
                     "status": inv.status.value,
-                    "created_at": inv.created_at.isoformat()
+                    "created_at": inv.created_at,
                 } for inv, fname, lname in results
             ]
         }
@@ -1655,7 +1655,7 @@ class CoachDisputeList(MethodView):
                     "amount": float(amt),
                     "reason": d.reason,
                     "status": d.status.value, 
-                    "created_at": d.created_at.isoformat()
+                    "created_at": d.created_at,
                 } for d, amt, fname, lname in results
             ]
         }
@@ -1776,8 +1776,8 @@ class ClientWorkoutPlanCreation(MethodView):
                 'assignment_id': assignment.assignment_id,
                 'assigned_to_client_id': client_id,
                 'assigned_by_coach_id': coach_profile.coach_profile_id,
-                'start_date': data['start_date'],
-                'end_date': data.get('end_date'),
+                'start_date': datetime.strptime(data['start_date'], '%Y-%m-%d').date() if data.get('start_date') else None,
+                'end_date': datetime.strptime(data.get('end_date'), '%Y-%m-%d').date() if data.get('end_date') else None,
                 'repeat_rule': data.get('repeat_rule', 'weekly'),
                 'status': 'active'
             }
@@ -1877,19 +1877,19 @@ def calculate_progress_summary(client_user_id, days=30):
         DailySurvey.date >= start_date
     ).all()
     
-    avg_energy = func.avg(DailySurvey.energy_level).filter(
+    avg_energy = db.session.query(func.avg(DailySurvey.energy_level)).filter(
         DailySurvey.user_id == client_user_id,
         DailySurvey.date >= start_date,
         DailySurvey.energy_level.isnot(None)
     ).scalar() or 0
     
-    avg_mood = func.avg(DailySurvey.mood_score).filter(
+    avg_mood = db.session.query(func.avg(DailySurvey.mood_score)).filter(
         DailySurvey.user_id == client_user_id,
         DailySurvey.date >= start_date,
         DailySurvey.mood_score.isnot(None)
     ).scalar() or 0
     
-    avg_sleep = func.avg(DailySurvey.sleep_hours).filter(
+    avg_sleep = db.session.query(func.avg(DailySurvey.sleep_hours)).filter(
         DailySurvey.user_id == client_user_id,
         DailySurvey.date >= start_date,
         DailySurvey.sleep_hours.isnot(None)
@@ -1898,13 +1898,13 @@ def calculate_progress_summary(client_user_id, days=30):
     # Workout completion rate
     total_workouts = WorkoutLogs.query.filter(
         WorkoutLogs.user_id == client_user_id,
-        WorkoutLogs.created_at >= start_date
+        WorkoutLogs.logged_at >= start_date
     ).count()
     
     # Nutrition logging rate
     total_meals = MealLogs.query.filter(
         MealLogs.user_id == client_user_id,
-        MealLogs.created_at >= start_date
+        MealLogs.logged_at >= start_date
     ).count()
     
     # Goals status
@@ -1957,17 +1957,17 @@ def get_recent_activity(client_user_id, days=7):
     # Recent workouts
     workouts = WorkoutLogs.query.filter(
         WorkoutLogs.user_id == client_user_id,
-        WorkoutLogs.created_at >= start_date
-    ).order_by(WorkoutLogs.created_at.desc()).limit(5).all()
+        WorkoutLogs.logged_at >= start_date
+    ).order_by(WorkoutLogs.logged_at.desc()).limit(5).all()
     
     for workout in workouts:
         activities.append({
-            'date': workout.created_at.date(),
+            'date': workout.logged_at.date(),
             'activity_type': 'workout',
             'description': f'Workout completed',
             'details': {
-                'sets': workout.sets,
-                'reps': workout.reps
+                'notes': workout.notes,
+                'calendar_workout_id': workout.calendar_workout_id
             }
         })
     
@@ -1991,7 +1991,7 @@ def get_goals_status(client_user_id):
             'status': goal.status,
             'progress_percentage': progress_percentage,
             'created_at': goal.created_at,
-            'target_date': goal.target_date
+            'target_date': datetime.combine(goal.end_date, datetime.min.time()),
         })
     
     return goals_status
