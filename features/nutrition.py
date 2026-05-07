@@ -168,22 +168,18 @@ class CreateMealLog(MethodView):
         return logs, 200
 
 ### Possibly unneeded
-
 ### Allows user to edit a meal log
 @nutrition_bp.route('/meal-logs/<int:meal_log_id>')
 class EditMealLog(MethodView):
     @jwt_required()
     @nutrition_bp.arguments(UpdateMealLogSchema)
     @nutrition_bp.response(200, CreateMealLogSchema)
-    def patch(self, meal_log_id, data):
-        
+    def patch(self, data, meal_log_id):
         auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=auth_id).first()
         if not user:
             abort(404, description="User not found")
 
-        ### Hardcoded user for testing
-        user = Users.query.first()
         meal_log = MealLogs.query.filter_by(
             meal_log_id=meal_log_id, 
             user_id=user.user_id
