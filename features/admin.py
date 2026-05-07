@@ -252,7 +252,8 @@ class AdminActiveUsersReportView(MethodView):
         Returns active users grouped by daily/weekly/monthly window
         """
 
-        period = request.args.get("period", "daily")
+        period = args.get("period", "daily") 
+        
         now = datetime.utcnow()
 
         # Time range
@@ -268,7 +269,7 @@ class AdminActiveUsersReportView(MethodView):
         # total active users
         total_active_users = db.session.execute(
             select(func.count(func.distinct(UserLoginActivity.user_id)))
-            .where(UserLoginActivity.created_at >= cutoff)
+            .where(UserLoginActivity.last_active_at >= cutoff)
         ).scalar()
 
         # client vs coach
@@ -277,7 +278,7 @@ class AdminActiveUsersReportView(MethodView):
                 UserLoginActivity.role_at_login,
                 func.count(func.distinct(UserLoginActivity.user_id))
             )
-            .where(UserLoginActivity.created_at >= cutoff)
+            .where(UserLoginActivity.last_active_at >= cutoff)
             .group_by(UserLoginActivity.role_at_login)
         ).all()
 
