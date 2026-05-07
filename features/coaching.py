@@ -7,34 +7,28 @@ from models import(
      Users,
      CoachReviews,
      UserRoles,
-     CoachProfiles, 
-     Specialties, 
-     CoachProgressPhotos, 
-     Roles, 
-     CoachDocuments, 
+     CoachProfiles,
+     Specialties,
+     CoachProgressPhotos,
+     Roles,
+     CoachDocuments,
      DailySurvey,
-     WorkoutPlanAssignments, 
-     MealPlanAssignments, 
-     CoachFavorites, 
-     CoachHireRequests, 
-     PaymentPlans, 
-     CoachClientRelationships, 
-     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes,Goals, WorkoutLogs, MealLogs
-     
+     WorkoutPlanAssignments,
+     MealPlanAssignments,
+     CoachFavorites,
+     CoachHireRequests,
+     PaymentPlans,
+     CoachClientRelationships,
+     PaymentMethods, Invoices, CoachAvailability, Payments, RefundDisputes, Goals, WorkoutLogs, MealLogs,
+     WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises
+
      )
-from db import db
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func, not_, select, desc
-from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema
-from schemas.client_schema import ReviewCoachSchema
-from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
-from models import Users, CoachReviews, UserRoles, CoachProfiles, Specialties, CoachProgressPhotos, Roles, CoachDocuments, DailySurvey, WorkoutPlanAssignments, MealPlanAssignments, CoachFavorites, CoachHireRequests, PaymentPlans, CoachClientRelationships, PaymentMethods, Invoices, CoachAvailability, WorkoutPlans, WorkoutPlanDays, WorkoutPlanDayExercises, Exercises, WorkoutLogs, MealLogs, Goals
 from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, not_, select, desc
 from schemas.coach_schema import CoachProfileSchema, CoachProfileQuerySchema, CoachDocumentSchema, CoachBrowsingSchema, ManageClientSchema, SpecialtySchema , AssignWorkoutPlanSchema, AssignMealPlanSchema, FavoriteCoachSchema, CoachBrowsingQuery, CoachAvailabilitySchema, ClientDashboardSchema, ClientListSchema, ClientWorkoutPlanCreateSchema, ClientWorkoutPlanSchema, ClientWorkoutAssignmentsSchema, WeeklyWorkoutDaySchema, PaymentPlanSchema, FullClientDashboardSchema
 from schemas.client_schema import ReviewCoachSchema, DailySurveySchema, HireRequestStatusSchema
-from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema
+from schemas.invoice_schema import CreateInvoiceSchema, UpdateInvoiceStatusSchema, ResolveDisputeSchema
 
 from models.coach_hire_requests import StatusEnum
 from models.invoices import StatusEnumList
@@ -47,10 +41,6 @@ from models.refund_disputes import StatusEnum_Disputes
 from models.payments import StatusEnum_Payments
 from models.payment_plans import BillTypeEnum
 
-
-
-# Import your schema
-from schemas.coach_schema import CoachProfileSchema
 
 coach_blp = Blueprint("Coach", __name__, url_prefix="/coach", description="Coach feat")
 
@@ -213,7 +203,7 @@ class InitSpecialties(MethodView):
             abort(500, description=f"Failed to initialize specialties: {str(e)}")
 
     @coach_blp.response(200, SpecialtySchema(many=True))
-    def get (sef):
+    def get(self):
         """Get all specialties"""
         specialties=db.session.execute(select(Specialties)).scalars().all()
 
@@ -1977,7 +1967,36 @@ def get_recent_activity(client_user_id, days=7):
 
 def get_goals_status(client_user_id):
     """Get current goals status for client"""
-    goals = Goals.query.filter_by(for_user_id=client_user_id).order_by(Goals.created_at.desc()).all()
+    try:
+        goals = Goals.query.filter_by(for_user_id=client_user_id).order_by(Goals.created_at.desc()).all()
+    except Exception as e:
+        # Handle enum value errors by using raw SQL to skip invalid records
+        from sqlalchemy import text
+        stmt = text("""
+            SELECT goal_id, description, status, created_at, end_date
+            FROM goals
+            WHERE for_user_id = :user_id
+            AND goal_type IN ('weight', 'strength', 'performance', 'nutrition', 'custom')
+            ORDER BY created_at DESC
+        """)
+        results = db.session.execute(stmt, {"user_id": client_user_id}).fetchall()
+        
+        goals_status = []
+        for row in results:
+            progress_percentage = 0
+            if row.status == 'completed':
+                progress_percentage = 100
+            
+            goals_status.append({
+                'goal_id': row.goal_id,
+                'description': row.description,
+                'status': row.status,
+                'progress_percentage': progress_percentage,
+                'created_at': row.created_at,
+                'target_date': datetime.combine(row.end_date, datetime.min.time()) if row.end_date else None,
+            })
+        
+        return goals_status
     
     goals_status = []
     for goal in goals:
@@ -1991,7 +2010,7 @@ def get_goals_status(client_user_id):
             'status': goal.status,
             'progress_percentage': progress_percentage,
             'created_at': goal.created_at,
-            'target_date': datetime.combine(goal.end_date, datetime.min.time()),
+            'target_date': datetime.combine(goal.end_date, datetime.min.time()) if goal.end_date else None,
         })
     
     return goals_status
@@ -2002,15 +2021,16 @@ def get_client_profile(client_user_id):
     profile = ClientProfiles.query.filter_by(client_id=client_user_id).first()
     if not profile:
         return None
-    
+
     return {
         'client_id': profile.client_id,
         'bio': profile.bio,
-        'age': profile.age,
+        'date_of_birth': profile.date_of_birth,
         'height': profile.height,
         'weight': profile.weight,
-        'fitness_goals': profile.fitness_goals,
-        'activity_level': profile.activity_level,
+        'gender': profile.gender,
+        'profile_photo': profile.profile_photo,
+        'timezone': profile.timezone,
         'created_at': profile.created_at
     }
 
@@ -2061,23 +2081,23 @@ def get_client_workout_assignments(client_user_id):
 def get_client_meal_assignments(client_user_id):
     """Get client's meal assignments"""
     from models.meal_plan_assignments import StatusEnum as MealStatusEnum
-    
+
     assignments = MealPlanAssignments.query.filter_by(
         user_id=client_user_id,
         status=MealStatusEnum.active
     ).all()
-    
+
     result = []
     for a in assignments:
         from models import MealPlans
-        plan = MealPlans.query.get(a.plan_id)
+        plan = MealPlans.query.get(a.meal_plan_id)
         if not plan:
             continue
-            
+
         result.append({
             'meal_plan_assignment_id': a.meal_plan_assignment_id,
-            'plan_id': a.plan_id,
-            'plan_name': plan.name if hasattr(plan, 'name') else f"Meal Plan {a.plan_id}",
+            'plan_id': a.meal_plan_id,
+            'plan_name': plan.name if hasattr(plan, 'name') else f"Meal Plan {a.meal_plan_id}",
             'status': a.status.value,
             'start_date': a.start_date,
             'end_date': a.end_date
@@ -2087,16 +2107,24 @@ def get_client_meal_assignments(client_user_id):
 
 def get_client_invoices(client_user_id):
     """Get client's recent invoices"""
-    invoices = Invoices.query.filter_by(client_user_id=client_user_id).order_by(
+    from sqlalchemy import join
+
+    # Join through coach_client_relationships to get invoices for this client
+    invoices = db.session.query(Invoices).join(
+        CoachClientRelationships,
+        Invoices.relationship_id == CoachClientRelationships.relationship_id
+    ).filter(
+        CoachClientRelationships.client_user_id == client_user_id
+    ).order_by(
         Invoices.created_at.desc()
     ).limit(10).all()
-    
+
     return [
         {
             'invoice_id': inv.invoice_id,
-            'amount': inv.amount,
+            'amount': inv.subtotal,
             'status': inv.status.value,
-            'due_date': inv.due_date,
+            'due_date': inv.issued_at,
             'created_at': inv.created_at
         }
         for inv in invoices
@@ -2104,16 +2132,16 @@ def get_client_invoices(client_user_id):
 
 def get_client_payments(client_user_id):
     """Get client's payment history"""
-    payments = Payments.query.filter_by(client_user_id=client_user_id).order_by(
-        Payments.payment_date.desc()
+    payments = Payments.query.filter_by(payer_user_id=client_user_id).order_by(
+        Payments.processed_at.desc()
     ).limit(10).all()
-    
+
     return [
         {
             'payment_id': p.payment_id,
             'amount': p.amount,
             'status': p.status.value,
-            'payment_date': p.payment_date
+            'payment_date': p.processed_at
         }
         for p in payments
     ]
@@ -2149,13 +2177,13 @@ def get_client_progress_photos(client_user_id):
     from models import ClientProgressPhotos
     photos = ClientProgressPhotos.query.filter_by(
         client_id=client_user_id
-    ).order_by(ClientProgressPhotos.upload_date.desc()).limit(10).all()
-    
+    ).order_by(ClientProgressPhotos.uploaded_at.desc()).limit(10).all()
+
     return [
         {
             'photo_id': p.photo_id,
             'photo_url': p.photo_url,
-            'upload_date': p.upload_date
+            'upload_date': p.uploaded_at
         }
         for p in photos
     ]
