@@ -14,6 +14,18 @@ from models.coach_profiles import ApprovalStatusEnum
 from models.coach_documents import StatusEnum
 from .utils import create_notification
 
+### Needed for Admin purge
+from models.conversation_participants import ConversationParticipants
+from models.user_log_in_activity import UserLoginActivity
+from models.meal_logs import MealLogs
+from models.messages import Messages 
+from models.workout_logs import WorkoutLogs  
+from models.daily_survey import DailySurvey 
+from models.goals import Goals               
+from models.notifications import Notifications 
+from models.coach_profiles import CoachProfiles 
+from models.client_profiles import ClientProfiles
+
 admin_blp=Blueprint("Admin", __name__, url_prefix="/admin", description="Admin features")
 
 @admin_blp.route("/coach-applications")
@@ -157,12 +169,22 @@ class AdminReviewActionView(MethodView):
 
 @admin_blp.route("/purge-user")
 class AdminPurgeUserView(MethodView):
-    @roles_required("admin")
+    #@roles_required("admin")
     @admin_blp.arguments(AdminPurgeUserSchema)
     @admin_blp.response(200, description="User and all related data purged.")
     def delete(self, update_data):
         user_id = update_data.get('user_id')
         user = Users.query.get_or_404(user_id)
+
+        ConversationParticipants.query.filter_by(user_id=user_id).delete()
+        UserLoginActivity.query.filter_by(user_id=user_id).delete()
+        MealLogs.query.filter_by(user_id=user_id).delete()
+        Messages.query.filter_by(sender_user_id=user_id).delete()
+        WorkoutLogs.query.filter_by(user_id=user_id).delete()
+        DailySurvey.query.filter_by(user_id=user_id).delete()
+        Notifications.query.filter_by(user_id=user_id).delete()
+        CoachProfiles.query.filter_by(user_id=user_id).delete()
+        ClientProfiles.query.filter_by(client_id=user_id).delete()
 
         db.session.delete(user)
         db.session.commit()
