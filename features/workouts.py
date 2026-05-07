@@ -1640,7 +1640,26 @@ class CalendarWorkoutsList2(MethodView):
         if not date and not view:
             view = "today"
 
-        if date:
+        # Check for week view first (it can use date as anchor)
+        if view == "week":
+            # Use provided date as the anchor for the week, otherwise use current UTC date
+            if date:
+                if isinstance(date, str):
+                    anchor = datetime.strptime(date, "%Y-%m-%d").date()
+                else:
+                    anchor = date
+            else:
+                anchor = datetime.utcnow().date()
+            
+            if isinstance(anchor, datetime):
+                anchor = anchor.date()
+            
+            # Start of week (Monday)
+            start = datetime.combine(anchor - timedelta(days=anchor.weekday()), datetime.min.time())
+            end = start + timedelta(days=7)
+        
+        elif date:
+            # Single day view
             if isinstance(date, str):
                 date = datetime.strptime(date, "%Y-%m-%d").date()
 
@@ -1651,16 +1670,6 @@ class CalendarWorkoutsList2(MethodView):
             today = datetime.utcnow().date()
             start = datetime.combine(today, datetime.min.time())
             end = start + timedelta(days=1)
-
-        elif view == "week":
-            # Use provided date as the anchor for the week, otherwise use current UTC date
-            anchor = date if date else datetime.utcnow().date()
-            if isinstance(anchor, datetime):
-                anchor = anchor.date()
-            
-            # Start of week (Monday)
-            start = datetime.combine(anchor - timedelta(days=anchor.weekday()), datetime.min.time())
-            end = start + timedelta(days=7)
 
         if start and end:
             query = query.filter(
