@@ -1653,8 +1653,10 @@ class CalendarWorkoutsList2(MethodView):
             end = start + timedelta(days=1)
 
         elif view == "week":
-            today = datetime.utcnow().date()
-            start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
+            base_date = date if date else datetime.utcnow().date()
+            if isinstance(base_date, datetime):
+                base_date = base_date.date()
+            start = datetime.combine(base_date - timedelta(days=base_date.weekday()), datetime.min.time())
             end = start + timedelta(days=7)
 
         if start and end:
