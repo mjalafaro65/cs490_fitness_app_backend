@@ -8,7 +8,7 @@ from datetime import datetime, timezone, date
 from .utils import create_notification
 
 from models.invoices import Invoices, StatusEnumList
-from models import Users ,Payments, RefundDisputes
+from models import Users ,Payments, RefundDisputes, CoachProfiles
 from models.coach_client_relationships import CoachClientRelationships
 
 from schemas.invoice_schema import CreateInvoiceSchema, CreateDisputeSchema
@@ -45,8 +45,16 @@ class IssueInvoiceView(MethodView):
 
         try:
             db.session.add(new_invoice)
+
+            create_notification(
+                user_id=data['client_user_id'],
+                role_id=1,  
+                type_slug="invoice-issued",
+                title="New Invoice Issued",
+                body=f"Coach {coach.first_name} has issued a new invoice for {data['subtotal']} USD."
+            )
+
             db.session.commit()
-            #Notification goes here?
             return new_invoice
             
         except Exception as e:
@@ -83,9 +91,16 @@ class VoidInvoiceView(MethodView):
         invoice.status = StatusEnumList.voided
 
         try:
+
+            create_notification(
+                user_id=relationship.client_user_id,
+                role_id=3,  
+                type_slug="invoice-voided",
+                title="Invoice Voided",
+                body=f"Coach {coach.first_name} has voided an invoice for {invoice.subtotal} {invoice.currency}."
+            )
+
             db.session.commit()
-            
-            #notification goes here
             return invoice
             
         except Exception as e:
@@ -132,8 +147,19 @@ class DisputeInvoiceView(MethodView):
         try:
             db.session.add(new_dispute)
             invoice.status = StatusEnumList.under_review 
+
+            coach_profile = CoachProfiles.query.get(relationship.coach_profile_id)
+
+            if coach_profile:
+                create_notification(
+                    user_id=coach_profile.user_id,
+                    role_id=2,  
+                    type_slug="invoice-disputed",
+                    title="Invoice Disputed",
+                    body=f"Client {client.first_name} has disputed a paid invoice of {invoice.subtotal} {invoice.currency}."
+                )
+
             db.session.commit()
-            #Notification goes here?
             return {"message": "Invoice disputed successfully. Admin will review the dispute."}, 201
             
         except Exception as e:

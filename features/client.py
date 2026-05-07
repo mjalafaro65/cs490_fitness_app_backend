@@ -1114,8 +1114,7 @@ class ClientCoachList(MethodView):
             .join(Users, CoachProfiles.user_id == Users.user_id)
             .join(Specialties, CoachProfiles.specialty_id == Specialties.specialty_id)
             .where(
-                CoachClientRelationships.client_user_id == client.user_id,
-                CoachClientRelationships.status == status_enum.active
+                CoachClientRelationships.client_user_id == client.user_id
             )
             .distinct() 
         ).all()
