@@ -56,6 +56,8 @@ class Users(db.Model):
     )
     meal_logs = db.relationship(
         "MealLogs",
+        cascade="all, delete-orphan"
+        
     )
     # meal_plan_assignments = db.relationship(
     #     "MealPlanAssignments",
@@ -138,7 +140,8 @@ class Users(db.Model):
     
     conversation_links = db.relationship(
         "ConversationParticipants",
-        back_populates="user"
+        back_populates="user",
+        cascade="all, delete-orphan"
     )
     
     roles = db.relationship(
