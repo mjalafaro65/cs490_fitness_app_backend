@@ -154,6 +154,8 @@ class WorkoutLogEntrySchema(Schema):
     calories = fields.Float(allow_none=True)
     duration_minutes = fields.Float(allow_none=True)
     notes = fields.Str(allow_none=True)
+    
+    exercise = fields.Nested("ExerciseSchema")
 
 class WorkoutLogSchema(Schema):
     workout_log_id = fields.Int(dump_only=True)

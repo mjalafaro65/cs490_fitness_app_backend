@@ -883,7 +883,9 @@ class PlanAssignmentList(MethodView):
         assignments = (
             db.session.query(WorkoutPlanAssignments, Users)
             .join(Users, Users.user_id == WorkoutPlanAssignments.assigned_to_user_id)
-            .filter(WorkoutPlanAssignments.plan_id == plan_id)
+            .filter(WorkoutPlanAssignments.plan_id == plan_id,
+                WorkoutPlanAssignments.status != "canceled"
+            )
             .all()
         )
         
@@ -916,6 +918,17 @@ class PlanAssignmentList(MethodView):
         if not plan or not _plan_readable(plan, user.user_id):
             abort(404, description="Plan not found.")
             
+        if not plan.days:
+            abort(400, description="Plan has no days.")
+            
+        has_exercises = any(
+            WorkoutPlanDayExercises.query.filter_by(day_id=day.plan_day_id).first()
+            for day in plan.days
+        )
+
+        if not has_exercises:
+            abort(400, description="Plan has no exercises.")
+            
         assigned_to_user_id = data.get("assigned_to_user_id") or user.user_id
 
         if assigned_to_user_id != user.user_id:
@@ -939,7 +952,15 @@ class PlanAssignmentList(MethodView):
         else:
             assignment_type = AssignmentTypeEnum.self
         
-    
+        
+        existing = WorkoutPlanAssignments.query.filter_by(
+            plan_id=plan.plan_id,
+            assigned_to_user_id=assigned_to_user_id,
+            status=AssignmentStatusEnum.active
+        ).first()
+
+        if existing:
+            abort(409, description="Plan already assigned to this user.")
        
         row = WorkoutPlanAssignments(
             plan_id=plan.plan_id,
@@ -1492,15 +1513,24 @@ def check_assignment_completion(user_id, calendar_workout):
     if not workouts:
         return
 
+    workouts_status = [w.status for w in workouts]
 
-    if any(w.status != "completed" for w in workouts):
+    # all completed → assignment completed
+    if all(status == "completed" for status in workouts_status):
+        assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
+        if assignment:
+            assignment.status = AssignmentStatusEnum.completed
+            db.session.commit()
         return
 
-    assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
 
-    if assignment:
-        assignment.status = AssignmentStatusEnum.completed
-        db.session.commit()
+    # all canceled → assignment canceled
+    if all(status == "canceled" for status in workouts_status):
+        assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
+        if assignment:
+            assignment.status = AssignmentStatusEnum.canceled
+            db.session.commit()
+        return
 
 
 @workout_blp.route("/calendar-workouts-view")
@@ -1615,35 +1645,37 @@ class MyWorkoutLogs(MethodView):
          Get all logs per day + their entries per exercise, takes optional user_id(client_id). filter by plan and date
         """
         # Get logged-in user
-        user =_current_user()
-        
-        # 2. Get role
-        client_role = Roles.query.filter_by(name="client").first()
+        # Get logged-in user
+        user = _current_user()
 
+        user_roles = UserRoles.query.filter_by(user_id=user.user_id).all()
+        role_ids = [r.role_id for r in user_roles]
+
+        client_role = Roles.query.filter_by(name="client").first()
         coach_role = Roles.query.filter_by(name="coach").first()
 
-        is_client = UserRoles.query.filter_by(
-            user_id=user.user_id,
-            role_id=client_role.role_id
-        ).first() if client_role else False
+        coach_profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
 
-        is_coach = UserRoles.query.filter_by(
-            user_id=user.user_id,
-            role_id=coach_role.role_id
-        ).first() if coach_role else False
+        # 👇 IMPORTANT: switched overrides everything
+        is_switched = coach_profile and coach_profile.status == "switched"
 
-        # optional client_id (coach only)
+        is_client = (
+            (client_role and client_role.role_id in role_ids)
+            or is_switched
+        )
+
+        is_coach = (
+            (coach_role and coach_role.role_id in role_ids)
+            and coach_profile
+            and coach_profile.status == "approved"
+        )
+                
         client_id = request.args.get("client_id", type=int)
 
-        # 4. Decide whose logs to fetch
-        if is_client:
-            # clients can only see themselves
+        if is_client and not is_coach:
             target_user_id = user.user_id
-        elif is_coach:
-            # coaches can see a specific client
-            coach_profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
-            is_coach = coach_profile and coach_profile.status == "approved"
 
+        elif is_coach:
             if client_id:
                 target_user_id = client_id
             else:
@@ -1652,7 +1684,7 @@ class MyWorkoutLogs(MethodView):
         else:
             abort(403, "Invalid role")
 
-        # 5. Fetch logs
+                # 5. Fetch logs
         calendar_workout_id = query_data.get("calendar_workout_id")
 
 
