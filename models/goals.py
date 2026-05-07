@@ -7,6 +7,7 @@ class GoalType(enum.Enum):
     strength = "strength"
     performance = "performance"
     nutrition = "nutrition"
+    frequency="frequency"
     custom = "custom"
 
 class StatusEnum(enum.Enum):

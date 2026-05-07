@@ -2,9 +2,9 @@ from flask import abort, request
 from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
-from datetime import date
+from datetime import date, timedelta
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, ReviewFilterSchema
-from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, AssignmentCancelSchema, AssignmentStatusSchema
+from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, AssignmentCancelSchema, AssignmentStatusSchema, GoalProgressSchema
 from schemas.coach_schema import CoachProfileSchema
 from models.coach_client_relationships import CoachClientRelationships, status_enum
 from models.invoices import Invoices
@@ -13,7 +13,7 @@ from models.refund_disputes import StatusEnum_Disputes
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select
-from models import Users, Goals, PaymentMethods, Payments, Specialties
+from models import Users, Goals, PaymentMethods, Payments, Specialties, GoalProgress
 from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
@@ -25,6 +25,7 @@ from models.payments import StatusEnum_Payments
 from models.coach_hire_requests import StatusEnum
 from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes, ClientProgressPhotos, WorkoutPlanAssignments, MealPlanAssignments
 from .utils import create_notification
+from models.goals import StatusEnum
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -881,34 +882,140 @@ class CreateGoalView(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description="Failed to create goal.")
-
+            
 @client_blp.route("/goal/<int:goal_id>")
-class EditGoalView(MethodView):
+class GoalUpdateView(MethodView):
+
     @jwt_required()
-    @client_blp.arguments(EditGoalSchema)
-    @client_blp.response(200, EditGoalSchema)
+    @client_blp.arguments(CreateGoalSchema)
     def patch(self, data, goal_id):
+
         user_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=user_id).first()
-        if not user:
-            return {"message": "User not found"}, 404
 
         goal = Goals.query.get_or_404(goal_id)
-        if goal.created_by_user_id != user.user_id and goal.for_user_id != user.user_id:
-            abort(403, description="You do not have permission to edit this goal.")
 
-        if data:
-            for key, value in data.items():
-                setattr(goal, key, value)
-            goal.updated_at = datetime.utcnow()
+        if goal.for_user_id != user.user_id:
+            abort(403)
+
+        try:
+            goal.title = data["title"]
+            goal.goal_type = data["goal_type"]
+            goal.description = data.get("description")
+            goal.target_value = data["target_value"]
+            goal.unit = data["unit"]
+            goal.start_date = data["start_date"]
+            goal.end_date = data["end_date"]
+            goal.status = data["status"]
+
+            db.session.commit()
+
+            return {"message": "Goal updated"}, 200
+
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description=str(e))
+            
+@client_blp.route("/my-goals")
+class UserGoalsView(MethodView):
+
+    @jwt_required()
+    def get(self):
+        auth_id = get_jwt_identity()
+        current_user = Users.query.filter_by(auth_id=auth_id).first()
+
+        if not current_user:
+            abort(404, description="User not found")
+        
+        one_month_ago = datetime.utcnow() - timedelta(days=30)
+
+        
+
+
+        goals = Goals.query.filter_by(for_user_id=current_user.user_id).all()
+
+        result = []
+        for g in goals:
+            history = GoalProgress.query.filter(
+                GoalProgress.goal_id == g.goal_id,
+                GoalProgress.recorded_at >= one_month_ago
+            ).order_by(GoalProgress.recorded_at.asc()).all()
+
+
+            latest = history[-1] if history else None
+            current_value = float(latest.value) if latest else 0
+            target_value = float(g.target_value) if g.target_value else 0
+            progress = round((current_value / target_value) * 100, 1) if target_value > 0 else 0
+            progress = min(progress, 100)
+            
+            if g.target_value and current_value >= float(g.target_value):
+                g.status = StatusEnum.completed
+
+
+            result.append({
+                "goal_id": g.goal_id,
+                "for_user_id": g.for_user_id,
+                "title": g.title,
+                "goal_type": g.goal_type.value if g.goal_type else None,
+                "status": g.status.value if g.status else None,
+                "target_value": str(g.target_value) if g.target_value else None,
+                "current_value": current_value,
+                "progress": progress,
+                "unit": g.unit,
+                "start_date": g.start_date.isoformat() if g.start_date else None,
+                "end_date": g.end_date.isoformat() if g.end_date else None,
+                "description": g.description,
+                "history": [{"date": e.recorded_at.strftime("%b %d"), "value": float(e.value)} for e in history],
+
+            })
+        return result,200
+
+
+@client_blp.route("/goals/<int:goal_id>/progress")
+class GoalProgressView(MethodView):
+
+    @jwt_required()
+    @client_blp.arguments(GoalProgressSchema)
+    def post(self, data, goal_id):
+
+        user_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=user_id).first()
+
+        goal = Goals.query.get_or_404(goal_id)
+
+        if goal.for_user_id != user.user_id:
+            abort(403)
+
+        now = datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        existing = GoalProgress.query.filter(
+            GoalProgress.goal_id == goal_id,
+            GoalProgress.recorded_at >= today_start,
+            GoalProgress.recorded_at <= today_end
+        ).first() 
+        if goal.goal_type == "frequency" and existing:
+            abort(409, message="Already added for today")
+
+        if existing:
+            existing.value = data["value"]
+            current_value = float(existing.value)
+        else:
+            progress = GoalProgress(goal_id=goal_id, value=data["value"])
+            db.session.add(progress)
+            current_value = float(data["value"])
+
+        # auto-complete if target reached
+        if goal.target_value and current_value >= float(goal.target_value):
+            goal.status = "completed"
 
         try:
             db.session.commit()
-            return goal
-        except Exception:
+            return {"message": "Progress updated"}, 201
+        except Exception as e:
             db.session.rollback()
-            abort(500, description="An error occurred while updating the goal.")
-
+            abort(500, description=str(e))
 
 
 @client_blp.route("/invoices")

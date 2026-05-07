@@ -110,8 +110,10 @@ class ProgressAnalyticsSchema(Schema):
 
 class CreateGoalSchema(Schema):
     goal_id = fields.Int(dump_only=True)
-    for_user_id = fields.Int(required=True)
+    for_user_id = fields.Int(required=False)
+    
     created_by_user_id = fields.Int(dump_only=True)
+    
     goal_type = fields.Str(validate=validate.OneOf([e.value for e in GoalType]))
     status = fields.Str(validate=validate.OneOf([e.value for e in StatusEnum]), load_default="active")
     title = fields.Str(required=True, validate=validate.Length(max=100))
@@ -148,3 +150,8 @@ class AssignmentStatusSchema(Schema):
     assigned_by_user_id = fields.Int(dump_only=True)
     status = fields.Str(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
+    
+    
+
+class GoalProgressSchema(Schema):
+    value = fields.Decimal(required=True)

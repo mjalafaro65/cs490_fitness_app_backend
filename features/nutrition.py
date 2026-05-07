@@ -7,7 +7,7 @@ from db import db
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, select, desc
 from models.meal_logs import MealLogs
-from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, CreateMealLogSchema, FetchMealsSchema, MealFilterArgsSchema, UpdateMealplanSchema
+from schemas.nutrition_schema import NutritionLogSchema , CreateMealplanSchema, CreateMealLogSchema, FetchMealsSchema, MealFilterArgsSchema, UpdateMealplanSchema, UpdateMealLogSchema
 from models.meals import Meals
 
 nutrition_bp = Blueprint('Nutrition', __name__, url_prefix="/nutrition", description='Nutrition features')
@@ -128,12 +128,19 @@ class CreateMealLog(MethodView):
         user = Users.query.filter_by(auth_id=user_id).first()
         if not user:
             return {"message": "User not found"}, 404
+        
+        meal_id = data.get("meal_id")
+        custom_meal_name = data.get("custom_meal_name") or data.get("name")
+
+        if not meal_id and not custom_meal_name:
+            abort(400, "Either meal_id or custom_meal_name is required")
 
         meal_log = MealLogs(
             user_id=user.user_id,
-            meal_id=data['meal_id'],
+            meal_id=meal_id,
+            custom_meal_name=custom_meal_name,
             servings=data['servings'],
-            calories=data['calories'],  
+            calories=data['calories'],
             notes=data.get('notes'),
             logged_at=datetime.utcnow()
         )
@@ -161,14 +168,14 @@ class CreateMealLog(MethodView):
         return logs, 200
 
 ### Possibly unneeded
-"""
+
 ### Allows user to edit a meal log
 @nutrition_bp.route('/meal-logs/<int:meal_log_id>')
 class EditMealLog(MethodView):
     @jwt_required()
     @nutrition_bp.arguments(UpdateMealLogSchema)
     @nutrition_bp.response(200, CreateMealLogSchema)
-    def patch(self, data, meal_log_id):
+    def patch(self, meal_log_id, data):
         
         auth_id = get_jwt_identity()
         user = Users.query.filter_by(auth_id=auth_id).first()
@@ -198,7 +205,7 @@ class EditMealLog(MethodView):
         except Exception as e:
             db.session.rollback()
             abort(500, description=f"Could not update meal log: {str(e)}")
-"""
+
     
 @nutrition_bp.route('/meal-logs/<int:log_id>')
 class MealLogUpdate(MethodView):

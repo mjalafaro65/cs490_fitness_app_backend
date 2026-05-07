@@ -26,10 +26,20 @@ class UpdateMealplanSchema(Schema):
 class CreateMealLogSchema(Schema):
     meal_log_id = fields.Int(dump_only=True)
     user_id = fields.Int(dump_only=True)
-    meal_id = fields.Int(required=True)
-    calories=fields.Int(required=False)
+
+    meal_id = fields.Int(required=False, allow_none=True)
+    custom_meal_name = fields.Str(required=False, allow_none=True)
+
+    calories = fields.Int(required=False)
+
     logged_at = fields.DateTime(dump_only=True)
-    servings = fields.Decimal(as_string=True, required=True, validate=validate.Range(min=0.01))
+
+    servings = fields.Decimal(
+        as_string=True,
+        required=True,
+        validate=validate.Range(min=0.01)
+    )
+
     notes = fields.Str()
 
 class MealFilterArgsSchema(Schema):
@@ -51,3 +61,8 @@ class FetchMealsSchema(Schema):
     description = fields.Str(dump_only=True)
     is_active = fields.Bool(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
+    
+class UpdateMealLogSchema(Schema):
+    servings = fields.Decimal()
+    notes = fields.Str()
+    calories = fields.Int()

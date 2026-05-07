@@ -17,3 +17,5 @@ class WorkoutLogEntries(db.Model):
     calories = db.Column(db.Integer, nullable=True)
     duration_minutes = db.Column(db.Integer, nullable=True)
     notes = db.Column(db.Text, nullable=True)
+
+    exercise = db.relationship("Exercises") 

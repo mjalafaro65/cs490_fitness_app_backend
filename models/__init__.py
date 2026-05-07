@@ -61,3 +61,4 @@ from .shared_plans import SharedPlans
 from .specialties import Specialties
 from .coach_documents import CoachDocuments
 from .user_log_in_activity import UserLoginActivity
+from .goal_progress import GoalProgress
