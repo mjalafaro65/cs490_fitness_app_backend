@@ -1513,25 +1513,44 @@ def check_assignment_completion(user_id, calendar_workout):
     if not workouts:
         return
 
-    workouts_status = [w.status for w in workouts]
+    # workouts_status = [w.status for w in workouts]
 
     # all completed → assignment completed
-    if all(status == "completed" for status in workouts_status):
-        assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
-        if assignment:
-            assignment.status = AssignmentStatusEnum.completed
-            db.session.commit()
-        return
+    # if all(status == "completed" for status in workouts_status):
+    #     assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
+    #     if assignment:
+    #         assignment.status = AssignmentStatusEnum.completed
+    #         db.session.commit()
+    #     return
 
 
-    # all canceled → assignment canceled
-    if all(status == "canceled" for status in workouts_status):
+    # # all canceled → assignment canceled
+    # if all(status == "canceled" for status in workouts_status):
+    #     assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
+    #     if assignment:
+    #         assignment.status = AssignmentStatusEnum.canceled
+    #         db.session.commit()
+    #     return
+
+    active_workouts = [w for w in workouts if w.status != "canceled"]
+
+    # if everything was canceled → canceled assignment
+    if len(active_workouts) == 0:
         assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
         if assignment:
             assignment.status = AssignmentStatusEnum.canceled
             db.session.commit()
         return
 
+    statuses = [w.status for w in active_workouts]
+
+    # all remaining completed → completed assignment
+    if all(status == "completed" for status in statuses):
+        assignment = WorkoutPlanAssignments.query.get(calendar_workout.assignment_id)
+        if assignment:
+            assignment.status = AssignmentStatusEnum.completed
+            db.session.commit()
+        return
 
 @workout_blp.route("/calendar-workouts-view")
 class CalendarWorkoutsList2(MethodView):
@@ -1645,41 +1664,50 @@ class MyWorkoutLogs(MethodView):
          Get all logs per day + their entries per exercise, takes optional user_id(client_id). filter by plan and date
         """
         # Get logged-in user
-        # Get logged-in user
         user = _current_user()
 
-        user_roles = UserRoles.query.filter_by(user_id=user.user_id).all()
-        role_ids = [r.role_id for r in user_roles]
+        role_names = [
+            r.name for r in Roles.query
+            .join(UserRoles, Roles.role_id == UserRoles.role_id)
+            .filter(UserRoles.user_id == user.auth_id)
+        ]
+        print(role_names)
 
-        client_role = Roles.query.filter_by(name="client").first()
-        coach_role = Roles.query.filter_by(name="coach").first()
+        is_client = "client" in role_names
+        is_coach = "coach" in role_names
 
         coach_profile = CoachProfiles.query.filter_by(user_id=user.user_id).first()
-
-        # 👇 IMPORTANT: switched overrides everything
         is_switched = coach_profile and coach_profile.status == "switched"
 
-        is_client = (
-            (client_role and client_role.role_id in role_ids)
-            or is_switched
-        )
-
-        is_coach = (
-            (coach_role and coach_role.role_id in role_ids)
-            and coach_profile
-            and coach_profile.status == "approved"
-        )
-                
         client_id = request.args.get("client_id", type=int)
 
+        # DEFAULT: always safe fallback
+        target_user_id = user.user_id
+        
+        print("=== ROLE DEBUG ===")
+        print("is_client:", is_client)
+        print("is_coach:", is_coach)
+        print("is_switched:", is_switched)
+
         if is_client and not is_coach:
+            # normal client
             target_user_id = user.user_id
+            print("=== TARGET USER DEBUG ===")
+            print("client_id (query param):", client_id)
+            print("FINAL target_user_id:", target_user_id)
 
         elif is_coach:
-            if client_id:
-                target_user_id = client_id
+            if is_switched:
+                target_user_id = user.user_id
             else:
-                abort(400, "client_id is required for coaches")
+                if not client_id:
+                    abort(400, "client_id is required for coaches")
+                target_user_id = client_id
+                
+            print("=== TARGET USER DEBUG ===")
+            print("client_id (query param):", client_id)
+            print("FINAL target_user_id:", target_user_id)
+        
 
         else:
             abort(403, "Invalid role")
