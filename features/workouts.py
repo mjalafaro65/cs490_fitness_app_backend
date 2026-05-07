@@ -879,6 +879,8 @@ class PlanAssignmentList(MethodView):
         plan = WorkoutPlans.query.filter_by(plan_id=plan_id, is_active=True).first()
         if not plan or not _plan_writable(plan, user.user_id):
             abort(403)
+            
+            
 
         assignments = (
             db.session.query(WorkoutPlanAssignments, Users)
@@ -889,9 +891,24 @@ class PlanAssignmentList(MethodView):
             .all()
         )
         
+        coach_profile = CoachProfiles.query.filter(
+    CoachProfiles.user_id == user.user_id
+).first()
+
+        is_coach = coach_profile is not None and coach_profile.status == "approved"
+        is_switched = coach_profile is not None and coach_profile.status == "switched"
+
         result = []
-        for a in assignments:
-            client = Users.query.get(a.assigned_to_user_id)
+
+        for a, client in assignments:
+            is_self = a.assigned_to_user_id == a.assigned_by_user_id
+
+            # hide self assignments if approved coach NOT switched
+            if is_coach and not is_switched:
+                if is_self:
+                    continue
+
+
             result.append({
                 "assignment_id": a.assignment_id,
                 "assigned_to_user_id": a.assigned_to_user_id,
@@ -1334,6 +1351,7 @@ class MyAssignments(MethodView):
 
             result.append({
                 "assignment_id": a.assignment_id,
+                "assigned_by_user_id" : a.assigned_by_user_id,
                 "status": a.status.value,
                 "start_date": a.start_date,
                 "end_date": a.end_date,
@@ -1684,10 +1702,7 @@ class MyWorkoutLogs(MethodView):
         # DEFAULT: always safe fallback
         target_user_id = user.user_id
         
-        print("=== ROLE DEBUG ===")
-        print("is_client:", is_client)
-        print("is_coach:", is_coach)
-        print("is_switched:", is_switched)
+     
 
         if is_client and not is_coach:
             # normal client
@@ -1704,9 +1719,7 @@ class MyWorkoutLogs(MethodView):
                     abort(400, "client_id is required for coaches")
                 target_user_id = client_id
                 
-            print("=== TARGET USER DEBUG ===")
-            print("client_id (query param):", client_id)
-            print("FINAL target_user_id:", target_user_id)
+            
         
 
         else:
