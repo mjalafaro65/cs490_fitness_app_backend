@@ -169,7 +169,7 @@ class AdminReviewActionView(MethodView):
 
 @admin_blp.route("/purge-user")
 class AdminPurgeUserView(MethodView):
-    #@roles_required("admin")
+    @roles_required("admin")
     @admin_blp.arguments(AdminPurgeUserSchema)
     @admin_blp.response(200, description="User and all related data purged.")
     def delete(self, update_data):
