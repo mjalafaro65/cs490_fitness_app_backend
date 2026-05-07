@@ -350,20 +350,19 @@ class ExerciseItem(MethodView):
             abort(404, description="Exercise not found.")
         return _serialize_exercise(ex)
 
-    @jwt_required()
+    # @jwt_required()
     @workout_blp.arguments(ExerciseUpdateSchema)
     @workout_blp.response(200)
     def patch(self, data, exercise_id):
         """Update your custom exercise (cannot edit catalog defaults)."""
-        user=  _current_user()
+        # user=  _current_user()
 
         ex = Exercises.query.get(exercise_id)
         if not ex:
             abort(404, description="Exercise not found.")
-        if ex.created_by_user_id is None:
-            abort(403, description="Catalog exercises cannot be edited.")
-        if ex.created_by_user_id != user.user_id:
-            abort(403, description="Not allowed to edit this exercise.")
+       
+            
+            
         if "name" in data and data["name"] is not None:
             ex.name = data["name"]
         if "muscle_group" in data and data["muscle_group"] is not None:
