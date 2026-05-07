@@ -102,7 +102,7 @@ class DailySurveyView(MethodView):
         entry = DailySurvey.query.filter_by(user_id=user.user_id, date=today).first()
 
         if not entry:
-            abort(404, description="No survey submitted for today.")
+            return {}, 200
 
         return entry
     
