@@ -898,6 +898,36 @@ class EditGoalView(MethodView):
 
 
 
+
+@client_blp.route("/goals/<int:goal_id>")
+class GoalDeleteView(MethodView):
+    @jwt_required()
+    @client_blp.response(200)
+    def delete(self, goal_id):
+        """
+        Delete a goal record - Restricted to the goal owner (client)
+        """
+        current_auth_id = get_jwt_identity()
+        user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
+
+        goal = Goals.query.get_or_404(goal_id)
+
+        if user.user_id != goal.for_user_id:
+            abort(403, description="Access denied: Only the goal owner can delete this record.")
+
+        try:
+            db.session.delete(goal)
+            db.session.commit()
+            return {"message": "Goal deleted successfully", "goal_id": goal_id}
+        
+        except Exception as e:
+            db.session.rollback()
+            abort(500, description="Database error occurred during deletion.")
+
+
+
+
+
 @client_blp.route("/invoices")
 class ClientInvoiceList(MethodView):
     @jwt_required()
@@ -1108,7 +1138,8 @@ class ClientCoachList(MethodView):
                 Users.last_name, 
                 Specialties.name.label("specialty_name"), 
                 CoachClientRelationships.started_at,
-                CoachClientRelationships.coach_profile_id
+                CoachClientRelationships.coach_profile_id,
+                CoachClientRelationships.status
             )
             .join(CoachProfiles, CoachClientRelationships.coach_profile_id == CoachProfiles.coach_profile_id)
             .join(Users, CoachProfiles.user_id == Users.user_id)
@@ -1126,6 +1157,7 @@ class ClientCoachList(MethodView):
                     "coach_name": f"{r.first_name} {r.last_name}",
                     "specialty": r.specialty_name, 
                     "started_at": r.started_at.isoformat(),
+                    "status": r.status.value,
                     "coach_profile_id": r.coach_profile_id
                 } for r in results
             ]
