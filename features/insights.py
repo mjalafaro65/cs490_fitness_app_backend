@@ -240,8 +240,7 @@ class NutritionProgressView(MethodView):
         since = datetime.utcnow() - timedelta(days=days)
 
         rows = (
-            db.session.query(MealLogs, Meals)
-            .join(Meals, MealLogs.meal_id == Meals.meal_id)
+            db.session.query(MealLogs)
             .filter(
                 MealLogs.user_id == user.user_id,
                 MealLogs.logged_at >= since
@@ -254,7 +253,7 @@ class NutritionProgressView(MethodView):
         from collections import defaultdict
         daily = defaultdict(lambda: {"calories": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "meals": []})
 
-        for ml, m in rows:
+        for ml in rows:
             servings = float(ml.servings or 0)
             date_key = ml.logged_at.date().isoformat()
 
