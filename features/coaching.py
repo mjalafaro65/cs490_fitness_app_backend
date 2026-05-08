@@ -2213,7 +2213,8 @@ def get_client_progress_photos(client_user_id):
     return [
         {
             'photo_id': p.photo_id,
-            'photo_url': p.photo_url,
+            'before_photo_url': p.before_photo_url,
+            'after_photo_url': p.after_photo_url,
             'upload_date': p.uploaded_at
         }
         for p in photos
