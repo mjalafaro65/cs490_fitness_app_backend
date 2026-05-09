@@ -52,6 +52,11 @@ class ResolveDisputeSchema(Schema):
 
 class InitiateFireSchema(Schema):
     relationship_id = fields.Int(required=True)
+class InitiateRehireSchema(Schema):
+    relationship_id = fields.Int(required=True)
+    payment_plan_id = fields.Int(required=True)
+    auto_pay_enabled = fields.Bool(required=False)
+    
 
 class ConfirmTerminationSchema(Schema):
     relationship_id = fields.Int(required=True)
