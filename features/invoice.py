@@ -48,7 +48,7 @@ class IssueInvoiceView(MethodView):
 
             create_notification(
                 user_id=data['client_user_id'],
-                role_id=1,  
+                # role_id=1,  
                 type_slug="invoice-issued",
                 title="New Invoice Issued",
                 body=f"Coach {coach.first_name} has issued a new invoice for {data['subtotal']} USD."
@@ -94,7 +94,7 @@ class VoidInvoiceView(MethodView):
 
             create_notification(
                 user_id=relationship.client_user_id,
-                role_id=3,  
+                # role_id=3,  
                 type_slug="invoice-voided",
                 title="Invoice Voided",
                 body=f"Coach {coach.first_name} has voided an invoice for {invoice.subtotal} {invoice.currency}."
@@ -153,7 +153,7 @@ class DisputeInvoiceView(MethodView):
             if coach_profile:
                 create_notification(
                     user_id=coach_profile.user_id,
-                    role_id=2,  
+                    # role_id=2,  
                     type_slug="invoice-disputed",
                     title="Invoice Disputed",
                     body=f"Client {client.first_name} has disputed a paid invoice of {invoice.subtotal} {invoice.currency}."

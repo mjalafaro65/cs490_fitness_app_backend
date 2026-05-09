@@ -3,6 +3,7 @@ from flask.views import MethodView
 from flask_smorest import Blueprint
 from db import db
 from datetime import date, timedelta
+from models.workout_plan_assignments import AssignmentStatusEnum
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, ReviewFilterSchema
 from schemas.client_schema import DailySurveySchema, ProfileSchema, HireRequestCreateSchema, HireRequestStatusSchema, HireRequestListSchema, ReviewCoachSchema, CreateGoalSchema, EditGoalSchema, AssignmentCancelSchema, AssignmentStatusSchema, GoalProgressSchema
 from schemas.coach_schema import CoachProfileSchema
@@ -365,7 +366,7 @@ class ClientHireRequestCreateView(MethodView):
 
         create_notification(
                 user_id=user.user_id,
-                role_id=1,
+                # role_id=1,
                 type_slug="coach-request",
                 title="New Coach Hire",
                 body=f"Your new requests has been received and the coach will be made aware"
@@ -415,7 +416,7 @@ class ClientHireRequestDetailView(MethodView):
 
             create_notification(
                 user_id=current_user.user_id,
-                role_id=1,
+                # role_id=1,
                 type_slug="coach-request-canceled",
                 title="Cancel Coach Request",
                 body=f"Your coach hire request has been canceled"
@@ -525,7 +526,7 @@ class ReviewCoachView(MethodView):
 
             create_notification(
                 user_id=coach.user_id,
-                role_id=2,  
+                # role_id=2,  
                 type_slug="new-review",
                 title="New Review Received",
                 body=f"A client has left you a {data['rating']}-star review."
@@ -873,7 +874,7 @@ class CreateGoalView(MethodView):
             if coach_profile:
                 create_notification(
                     user_id=coach_profile.user_id,
-                    role_id=2,  
+                    # role_id=2,  
                     type_slug="client-goal-created",
                     title="New Client Goal",
                     body=f"Your client {user.first_name} has created a new goal: {data['title']}."
@@ -1148,7 +1149,7 @@ class PayInvoice(MethodView):
         
         create_notification(
             user_id=coach_profile.user_id,
-            role_id=2,
+            # role_id=2,
             type_slug="payment-received",
             title="Payment Received",
             body=f"Client {client_user.first_name} paid invoice #{invoice.invoice_id} for ${invoice.subtotal}."
@@ -1232,7 +1233,7 @@ class CreateDispute(MethodView):
             if coach_profile:
                 create_notification(
                     user_id=coach_profile.user_id,
-                    role_id=2,  
+                    # role_id=2,  
                     type_slug="payment-dispute-opened",
                     title="Payment Disputed",
                     body=f"Client {client.first_name} has opened a dispute regarding a recent payment."
@@ -1307,17 +1308,17 @@ class InitiateFireCoach(MethodView):
                 "status": "blocked"
             }, 400
 
-        create_notification(
-            user_id=client.user_id,
-            role_id=1,
-            type_slug="termination-warning",
-            title="Termination Initiated",
-            body=(
-                "You have initiated the process to end your coaching relationship. "
-                "Please confirm to finalize. Note: Access to training plans will be revoked "
-                "and recurring billing will stop immediately upon confirmation."
-            )
-        )
+        # create_notification(
+        #     user_id=client.user_id,
+        #     # role_id=1,
+        #     type_slug="termination-warning",
+        #     title="Termination Initiated",
+        #     body=(
+        #         "You have initiated the process to end your coaching relationship. "
+        #         "Please confirm to finalize. Note: Access to training plans will be revoked "
+        #         "and recurring billing will stop immediately upon confirmation."
+        #     )
+        # )
 
         return {
             "warning": "Termination Warning",
@@ -1363,7 +1364,7 @@ class ConfirmFireCoach(MethodView):
         
         create_notification(
             user_id=coach_profile.user_id,
-            role_id=2,
+            # role_id=2,
             type_slug="coach-notified-relationship-terminated",
             title="Relationship Ended",
             body=f"Client {client.first_name} {client.last_name} has ended the coaching relationship. Any pending invoices have been voided."
@@ -1371,7 +1372,7 @@ class ConfirmFireCoach(MethodView):
 
         create_notification(
             user_id=client.user_id,
-            role_id=1,
+            # role_id=1,
             type_slug="client-notified-relationship-terminated",
             title="Coach Fired Successfully",
             body="The relationship has been terminated and your pending billing for this coach was voided."
@@ -1436,7 +1437,7 @@ class RehireCoach(MethodView):
 
         create_notification(
             user_id=coach_profile.user_id,
-            role_id=2,
+            # role_id=2,
             type_slug="rehire-request",
             title="Rehire Request",
             body=f"Your former client {client.first_name} {client.last_name} wants to work with you again."
@@ -1742,7 +1743,7 @@ class WorkoutAssignmentCancelView(MethodView):
             # Notify coach
             create_notification(
                 user_id=assignment.assigned_by_user_id,
-                role_id=2,
+                # role_id=2,
                 type_slug="workout-assignment-canceled",
                 title="Workout Plan Canceled",
                 body=f"Client {current_user.first_name} canceled their assigned workout plan."
@@ -1779,7 +1780,7 @@ class MealAssignmentCompleteView(MethodView):
             # Notify coach
             create_notification(
                 user_id=assignment.assigned_by_user_id,
-                role_id=2,
+                # role_id=2,
                 type_slug="meal-assignment-completed",
                 title="Meal Plan Completed",
                 body=f"Client {current_user.first_name} completed their assigned meal plan."
@@ -1815,7 +1816,7 @@ class MealAssignmentCancelView(MethodView):
             # Notify coach
             create_notification(
                 user_id=assignment.assigned_by_user_id,
-                role_id=2,
+                # role_id=2,
                 type_slug="meal-assignment-canceled",
                 title="Meal Plan Canceled",
                 body=f"Client {current_user.first_name} canceled their assigned meal plan."

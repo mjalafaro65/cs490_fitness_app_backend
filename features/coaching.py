@@ -941,7 +941,7 @@ class AssignWorkoutPlan(MethodView):
 
             create_notification(
                 user_id=client_id,
-                role_id=1,  
+                # role_id=1,  
                 type_slug="workout-plan-assigned",
                 title="New Workout Plan Assigned",
                 body=f"Coach {coach_user.first_name} has assigned you a new plan."
@@ -1211,7 +1211,7 @@ class CoachAcceptHireRequest(MethodView):
 
         create_notification(
             user_id=hire_request.client_user_id,
-            role_id=1,
+            # role_id=1,
             type_slug="client-request-accepted",
             title="Client Accepted",
             body=notification_body
@@ -1383,7 +1383,7 @@ class CoachDenyHireRequest(MethodView):
 
         create_notification(
             user_id=hire_request.client_user_id,
-            role_id=1,
+            # role_id=1,
             type_slug="client-request-denied",
             title="Client Denied",
             body=f"Coach {coach_user.first_name} is unable to take on new clients at this time. Your request has been declined."
@@ -1489,7 +1489,7 @@ class CoachManageClientStatus(MethodView):
 
         create_notification(
             user_id=relationship.client_user_id,
-            role_id=1,
+            # role_id=1,
             type_slug="relationship-update",
             title="Relationship Status Changed",
             body=f"Coach {coach_user.first_name} has updated your status to: {new_status_str}."
@@ -1551,7 +1551,7 @@ class CoachGenerateInvoice(MethodView):
 
         create_notification(
             user_id=rel.client_user_id,
-            role_id=1,
+            # role_id=1,
             type_slug="invoice-generated",
             title="Invoice Generated",
             body=f"New invoice for ${input_amount} issued by Coach {coach_user.first_name}."
@@ -1622,7 +1622,7 @@ class UpdateInvoiceStatus(MethodView):
         if relationship:
             create_notification(
                 user_id=relationship.client_user_id,
-                role_id=1,
+                # role_id=1,
                 type_slug="invoice-update",
                 title="Invoice Status Changed",
                 body=f"Your invoice #{invoice.invoice_id} has been updated from {old_status} to {invoice.status.value}."
@@ -1734,7 +1734,7 @@ class ResolveDispute(MethodView):
         
         create_notification(
             user_id=dispute.opened_by_user_id,
-            role_id=1,
+            # role_id=1,
             type_slug="dispute-resolved",
             title=f"Dispute Resolved",
             body=f"Your dispute for payment #{dispute.payment_id} was {status_str}."

@@ -103,7 +103,7 @@ class AdminDocumentActionView(MethodView):
                
         create_notification(
             user_id=coach_profile.user_id,
-            role_id=2,
+            # role_id=2,
             type_slug="coach-document-reviewed",
             title="Coach Document Reviewed",
             body=f"Your document has been marked as {document.status}."
@@ -158,7 +158,7 @@ class AdminReviewActionView(MethodView):
         if coach_profile:
             create_notification(
                 user_id=coach_profile.user_id,
-                role_id=2, 
+                # role_id=2, 
                 type_slug="review-moderated",
                 title="Review Moderated",
                 body="An admin has updated the status of a review on your profile."
@@ -351,7 +351,7 @@ class DisableAccountView(MethodView):
         
         create_notification(
             user_id=user.user_id,
-            role_id=user.role_id,
+            # role_id=user.role_id,
             type_slug="account-status-change",
             title=f"Account Status Change",
             body=f"Your account has been {status_text} by an administrator."
