@@ -12,13 +12,13 @@ from models.refund_disputes import StatusEnum_Disputes
 
 from schemas.coach_schema import PaymentPlanSchema
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from models import Users, Goals, PaymentMethods, Payments, Specialties, GoalProgress
 from models.coach_reports import CoachReports, StatusEnum
 from models.daily_survey import DailySurvey
 from models.review_interactions import InteractionType
 from datetime import datetime, timezone
-from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema, InitiateFireSchema, ConfirmTerminationSchema
+from schemas.invoice_schema import PayInvoiceSchema, CreateDisputeSchema, InitiateFireSchema, ConfirmTerminationSchema, InitiateRehireSchema
 
 from models.invoices import StatusEnumList
 from models.payments import StatusEnum_Payments
@@ -26,6 +26,7 @@ from models.coach_hire_requests import StatusEnum
 from models import ClientProfiles, PaymentPlans, CoachHireRequests, CoachProfiles, CoachReviews, CoachFavorites, ReviewInteractions, RefundDisputes, ClientProgressPhotos, WorkoutPlanAssignments, MealPlanAssignments
 from .utils import create_notification
 from models.goals import StatusEnum
+from models.coach_profiles import ApprovalStatusEnum
 
 client_blp = Blueprint("ClientOperations", __name__, url_prefix="/client", description="Client Operations")
 
@@ -274,7 +275,10 @@ class ClientPaymentPlanListView(MethodView):
             PaymentPlans.coach_profile_id == CoachProfiles.coach_profile_id
         ).filter(
             PaymentPlans.is_active == True,
-            CoachProfiles.status == "approved",
+            or_(
+                CoachProfiles.status == ApprovalStatusEnum.approved,
+                CoachProfiles.status == ApprovalStatusEnum.switched
+            ),
             CoachProfiles.user_id == profile.user_id
         ).all()
 
@@ -1378,42 +1382,69 @@ class ConfirmFireCoach(MethodView):
             "status": "terminated"
         }
     
-
 @client_blp.route("/rehire-coach")
 class RehireCoach(MethodView):
     @jwt_required()
-    @client_blp.arguments(InitiateFireSchema)
+    @client_blp.arguments(InitiateRehireSchema)
     def post(self, data):
         current_auth_id = get_jwt_identity()
+        from models.coach_hire_requests import StatusEnum
         client = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
 
         old_rel = CoachClientRelationships.query.filter_by(
             relationship_id=data["relationship_id"],
             client_user_id=client.user_id,
-            status=status_enum.terminated 
+            status=status_enum.terminated
         ).first_or_404()
 
         coach_profile = CoachProfiles.query.get(old_rel.coach_profile_id)
         if not coach_profile:
-            return {"message": "This coach is no longer available for rehire."}, 404
+            abort(404, description="Coach no longer available.")
 
-        old_rel.status = status_enum.active 
-        old_rel.termination_reason = None 
-        old_rel.ended_at = None
-        
+        # check coach is still approved
+        if coach_profile.status not in [ApprovalStatusEnum.approved, ApprovalStatusEnum.switched]:
+            abort(400, description="Coach is no longer accepting clients.")
+
+        # check client has no active coach
+        active = CoachClientRelationships.query.filter_by(
+            client_user_id=client.user_id,
+            status=status_enum.active
+        ).first()
+        if active:
+            abort(409, description="You already have an active coach.")
+
+        # check no pending rehire request already exists
+        existing_pending = CoachHireRequests.query.filter_by(
+            client_user_id=client.user_id,
+            coach_profile_id=old_rel.coach_profile_id,
+            status=StatusEnum.pending
+        ).first()
+        if existing_pending:
+            abort(409, description="Pending rehire request already exists.")
+
+        new_request = CoachHireRequests(
+            client_user_id=client.user_id,
+            coach_profile_id=old_rel.coach_profile_id,
+            # payment_plan_id=old_rel.payment_plan_id,
+            payment_plan_id=data["payment_plan_id"],
+            auto_pay_enabled=data.get("auto_pay_enabled", False),
+
+            status=StatusEnum.pending,
+        )
+        db.session.add(new_request)
         db.session.commit()
 
         create_notification(
             user_id=coach_profile.user_id,
             role_id=2,
-            type_slug="rehire-coach",
-            title="New Rehire",
-            body=f"Your former client {client.first_name} {client.last_name} wants to work with you again!"
+            type_slug="rehire-request",
+            title="Rehire Request",
+            body=f"Your former client {client.first_name} {client.last_name} wants to work with you again."
         )
 
         return {
-            "message": "Rehire previously fired coach",
-            "status": "pending"
+            "message": "Rehire request sent. Waiting for coach approval.",
+            "request_id": new_request.request_id
         }
             
 # <<<<<<< Coach-favorite-feature

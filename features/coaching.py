@@ -1093,6 +1093,7 @@ class CoachHireRequestDetailView(MethodView):
 class CoachAcceptHireRequest(MethodView):
     @jwt_required()
     def post(self, request_id):
+        from models.coach_hire_requests import StatusEnum
         current_auth_id = get_jwt_identity()
         coach_user = Users.query.filter_by(auth_id=current_auth_id).first_or_404()
         
@@ -1115,17 +1116,39 @@ class CoachAcceptHireRequest(MethodView):
 
         hire_request.status = StatusEnum.accepted
         hire_request.decided_at = db.func.now()
-
-        new_relationship = CoachClientRelationships(
-            coach_profile_id=hire_request.coach_profile_id,
-            client_user_id=hire_request.client_user_id,
-            payment_plan_id=hire_request.payment_plan_id,
-            status="active", 
-            started_at=db.func.now()
-        )
-        db.session.add(new_relationship)
-        db.session.flush() 
         
+        existing_rel = CoachClientRelationships.query.filter_by(
+            coach_profile_id=hire_request.coach_profile_id,
+            client_user_id=hire_request.client_user_id
+        ).first()
+
+        from models.coach_client_relationships import status_enum
+        if existing_rel:
+            existing_rel.status = status_enum.active
+            existing_rel.termination_reason = None
+            existing_rel.ended_at = None
+            existing_rel.started_at = db.func.now()
+            relationship = existing_rel  
+        else:
+            relationship = CoachClientRelationships(
+                coach_profile_id=hire_request.coach_profile_id,
+                client_user_id=hire_request.client_user_id,
+                payment_plan_id=hire_request.payment_plan_id,
+                status=status_enum.active,
+                started_at=db.func.now()
+            )
+            db.session.add(relationship)
+        
+        other_pending = CoachHireRequests.query.filter(
+            CoachHireRequests.client_user_id == hire_request.client_user_id,
+            CoachHireRequests.request_id != hire_request.request_id,
+            CoachHireRequests.status == StatusEnum.pending
+        ).all()
+
+        for req in other_pending:
+            req.status = StatusEnum.canceled  
+                 
+        db.session.flush() 
         
         
         #create conversation
@@ -1135,9 +1158,9 @@ class CoachAcceptHireRequest(MethodView):
                 coach_profile.user_id
             ],
             conversation_type="relationship",
-            relationship_id=new_relationship.relationship_id
+            relationship_id=relationship.relationship_id
         )
-      
+            
 
         plan = PaymentPlans.query.get(hire_request.payment_plan_id)
         default_pm = PaymentMethods.query.filter_by(
@@ -1151,7 +1174,7 @@ class CoachAcceptHireRequest(MethodView):
       
 
         new_invoice = Invoices(
-            relationship_id=new_relationship.relationship_id,
+            relationship_id=relationship.relationship_id,
             payment_method_id=default_pm.payment_method_id if default_pm else None,
             status=StatusEnumList.issued,
             currency="USD",
@@ -1159,6 +1182,7 @@ class CoachAcceptHireRequest(MethodView):
             created_at=now_utc,
             issued_at=now_utc
         )
+        
         db.session.add(new_invoice)
         db.session.flush()
 
@@ -1195,7 +1219,7 @@ class CoachAcceptHireRequest(MethodView):
 
         return {
             "message": "Relationship activated and initial payment processed",
-            "relationship_id": new_relationship.relationship_id,
+            "relationship_id": relationship.relationship_id,
             "invoice_id": new_invoice.invoice_id
         }
     
