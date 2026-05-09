@@ -1577,7 +1577,7 @@ class CalendarWorkoutsList2(MethodView):
         view: date or week(optional),
         Coach: gets all users workouts for day or week
         
-        /calendar-workouts-view?date={date}?view={date or week}
+        /calendar-workouts-view??view={date or week}
         
     """
 

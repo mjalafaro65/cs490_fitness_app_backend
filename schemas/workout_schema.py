@@ -1,5 +1,5 @@
 from marshmallow import Schema, fields, validate, pre_load
-from models import Exercises,WorkoutPlanDayExercises, WorkoutPlans, CalendarWorkouts, WorkoutPlanDays
+from models import Exercises,WorkoutPlanDayExercises, WorkoutPlans, CalendarWorkouts, WorkoutPlanDays, Users
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
 
@@ -228,6 +228,14 @@ class CalendarViewSchema(SQLAlchemyAutoSchema):
         load_instance = True
 
     plan_day = fields.Nested(PlanDaySchema)
+    user_name = fields.Method("get_user_name")
+
+    def get_user_name(self, obj):
+        if not obj.user_id:
+            return None
+
+        user = Users.query.get(obj.user_id)
+        return f"{user.first_name} {user.last_name}" if user else None
     
 class CalendarWorkoutQuerySchemaWeek(Schema):
     view = fields.String(required=False)

@@ -1614,6 +1614,7 @@ class ClientProgressPhotosView(MethodView):
                 "before_photo_url": None,
                 "after_photo_url": None
             }
+            
     
     @jwt_required()
     def post(self):
