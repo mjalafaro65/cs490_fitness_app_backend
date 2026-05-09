@@ -231,10 +231,10 @@ class CalendarViewSchema(SQLAlchemyAutoSchema):
     user_name = fields.Method("get_user_name")
 
     def get_user_name(self, obj):
-        if not obj.user_id:
+        if not obj.for_user_id:
             return None
 
-        user = Users.query.get(obj.user_id)
+        user = Users.query.get(obj.for_user_id)
         return f"{user.first_name} {user.last_name}" if user else None
     
 class CalendarWorkoutQuerySchemaWeek(Schema):
