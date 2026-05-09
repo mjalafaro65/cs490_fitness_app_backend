@@ -279,7 +279,7 @@ class ProgressPhotoSchema(Schema):
 class SurveyStatusSchema(Schema):
     completed = fields.Bool(dump_only=True)
     last_completed = fields.DateTime(dump_only=True, allow_none=True)
-
+    survey = fields.Dict(allow_none=True)
 
 class FullClientDashboardSchema(Schema):
     client_info = fields.Nested(ClientBasicInfoSchema)

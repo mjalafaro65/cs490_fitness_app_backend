@@ -2186,6 +2186,7 @@ def get_client_coaches(client_user_id):
         coach_user = Users.query.get(coach.user_id)
         if not coach_user:
             continue
+        
             
         result.append({
             'coach_profile_id': coach.coach_profile_id,
@@ -2226,7 +2227,18 @@ def get_client_survey_status(client_user_id):
     
     return {
         'completed': survey is not None,
-        'last_completed': survey.created_at if survey else None
+        'last_completed': survey.created_at if survey else None,
+        "survey": {
+            "date": survey.date,
+            "daily_goal": survey.daily_goal,
+            "energy_level": survey.energy_level,
+            "target_focus": survey.target_focus,
+            "water_oz": float(survey.water_oz) if survey.water_oz else 0,
+            "mood_score": survey.mood_score,
+            "weight_lbs": float(survey.weight_lbs) if survey.weight_lbs else None,
+            "sleep_hours": float(survey.sleep_hours) if survey.sleep_hours else None,
+            "notes": survey.notes,
+        }
     }
 
 # Dashboard Endpoints

@@ -165,12 +165,19 @@ class WorkoutLogSchema(Schema):
     notes = fields.Str()
 
     entries = fields.List(fields.Nested(WorkoutLogEntrySchema))
+    plan_name = fields.Method("get_plan_name")
+    def get_plan_name(self, obj):
+        try:
+            return obj.calendar_workout.plan_day.plan.name
+        except:
+            return None
 
 
     
 class WorkoutLogQuerySchema(Schema):
     client_id = fields.Int(allow_none=True)
     calendar_workout_id = fields.Int(required=False)
+    days= fields.Int(required=False,allow_none=True)
 
 
 
