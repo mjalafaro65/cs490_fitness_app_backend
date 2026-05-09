@@ -17,5 +17,10 @@ class WorkoutLogs(db.Model):
         backref="log",
         cascade="all, delete-orphan"
     )
+    
+    calendar_workout = db.relationship(
+        "CalendarWorkouts",
+        backref="workout_logs"
+    )
 
     

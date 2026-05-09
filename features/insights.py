@@ -257,26 +257,26 @@ class NutritionProgressView(MethodView):
             servings = float(ml.servings or 0)
             date_key = ml.logged_at.date().isoformat()
 
-            calories  = int((m.calories or 0) * servings) if m.calories  else 0
-            protein_g =  float(m.protein_g or 0) * servings if m.protein_g else 0
-            carbs_g   =float(m.carbs_g or 0) * servings if m.carbs_g   else 0
-            fat_g     =float(m.fat_g or 0) * servings if m.fat_g     else 0
+            calories  = int((ml.calories or 0) * servings) if ml.calories  else 0
+            # protein_g =  float(ml.protein_g or 0) * servings if ml.protein_g else 0
+            # carbs_g   =float(ml.carbs_g or 0) * servings if ml.carbs_g   else 0
+            # fat_g     =float(ml.fat_g or 0) * servings if ml.fat_g     else 0
             
             
 
 
 
             daily[date_key]["calories"]  += calories
-            daily[date_key]["protein_g"] += round(protein_g, 1)
-            daily[date_key]["carbs_g"]   += round(carbs_g, 1)
-            daily[date_key]["fat_g"]     += round(fat_g, 1)
+            # daily[date_key]["protein_g"] += round(protein_g, 1)
+            # daily[date_key]["carbs_g"]   += round(carbs_g, 1)
+            # daily[date_key]["fat_g"]     += round(fat_g, 1)
             daily[date_key]["meals"].append({
-                "meal_name": m.name,
+                "meal_name": ml.custom_meal_name,
                 "servings": servings,
                 "calories": calories,
-                "protein_g": round(protein_g, 1),
-                "carbs_g": round(carbs_g, 1),
-                "fat_g": round(fat_g, 1),
+                # "protein_g": round(protein_g, 1),
+                # "carbs_g": round(carbs_g, 1),
+                # "fat_g": round(fat_g, 1),
             })
 
         history = [{"date": date, **data} for date, data in sorted(daily.items())]
@@ -284,9 +284,9 @@ class NutritionProgressView(MethodView):
         # overall averages
         if history:
             avg_calories  = round(sum(d["calories"]  for d in history) / len(history), 1)
-            avg_protein   = round(sum(d["protein_g"] for d in history) / len(history), 1)
-            avg_carbs     = round(sum(d["carbs_g"]   for d in history) / len(history), 1)
-            avg_fat       = round(sum(d["fat_g"]     for d in history) / len(history), 1)
+            # avg_protein   = round(sum(d["protein_g"] for d in history) / len(history), 1)
+            # avg_carbs     = round(sum(d["carbs_g"]   for d in history) / len(history), 1)
+            # avg_fat       = round(sum(d["fat_g"]     for d in history) / len(history), 1)
         else:
             avg_calories = avg_protein = avg_carbs = avg_fat = None
 
@@ -295,9 +295,9 @@ class NutritionProgressView(MethodView):
             "period_days": days,
             "summary": {
                 "avg_daily_calories": avg_calories,
-                "avg_protein_g": avg_protein,
-                "avg_carbs_g": avg_carbs,
-                "avg_fat_g": avg_fat,
+                # "avg_protein_g": avg_protein,
+                # "avg_carbs_g": avg_carbs,
+                # "avg_fat_g": avg_fat,
                 "days_logged": len(history),
             },
             "history": history,

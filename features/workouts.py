@@ -1577,7 +1577,7 @@ class CalendarWorkoutsList2(MethodView):
         view: date or week(optional),
         Coach: gets all users workouts for day or week
         
-        /calendar-workouts-view?date={date}?view={date or week}
+        /calendar-workouts-view??view={date or week}
         
     """
 
@@ -1696,6 +1696,7 @@ class MyWorkoutLogs(MethodView):
         """
         # Get logged-in user
         user = _current_user()
+        
 
         role_names = [
             r.name for r in Roles.query
@@ -1745,8 +1746,11 @@ class MyWorkoutLogs(MethodView):
 
         query = (
             db.session.query(WorkoutLogs)
-            .outerjoin(CalendarWorkouts,
-                      WorkoutLogs.calendar_workout_id == CalendarWorkouts.calendar_workout_id)
+            .options(
+                selectinload(WorkoutLogs.calendar_workout)
+                .selectinload(CalendarWorkouts.plan_day)
+                .selectinload(WorkoutPlanDays.plan)
+            )
             .filter(WorkoutLogs.user_id == target_user_id)
         )
 
@@ -1755,6 +1759,12 @@ class MyWorkoutLogs(MethodView):
                 WorkoutLogs.calendar_workout_id == calendar_workout_id
             )
 
+       
+        days = request.args.get("days", type=int)
+
+        if days:
+            start_date = datetime.utcnow() - timedelta(days=days)
+            query = query.filter(WorkoutLogs.logged_at >= start_date)
 
         logs = query.all()
 

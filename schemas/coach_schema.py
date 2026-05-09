@@ -24,7 +24,6 @@ from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 from models import CoachProfiles, CoachDocuments
 from db import db
 from models.payment_plans import BillTypeEnum
-
 #done automatically using model
 
 class UserBasicSchema(Schema):
@@ -215,14 +214,18 @@ class ClientListSchema(Schema):
 # Full Client Dashboard Schema for Coach View
 class ClientProfileSchema(Schema):
     client_id = fields.Int(dump_only=True)
+
+    date_of_birth = fields.Date(format='%Y-%m-%d', dump_only=True)
+
+    gender = fields.Method("get_gender", dump_only=True)
+
     bio = fields.Str(dump_only=True)
-    age = fields.Int(dump_only=True)
+    profile_photo = fields.Str(dump_only=True)
     height = fields.Float(dump_only=True)
     weight = fields.Float(dump_only=True)
-    fitness_goals = fields.Str(dump_only=True)
-    activity_level = fields.Str(dump_only=True)
-    created_at = fields.DateTime(dump_only=True)
 
+    def get_gender(self, obj):
+        return obj.gender.value if obj.gender else None
 
 class WorkoutAssignmentSchema(Schema):
     assignment_id = fields.Int(dump_only=True)
@@ -268,18 +271,19 @@ class CoachInfoSchema(Schema):
 
 class ProgressPhotoSchema(Schema):
     photo_id = fields.Int(dump_only=True)
-    photo_url = fields.Str(dump_only=True)
+    before_photo_url = fields.Str(dump_only=True)
+    after_photo_url = fields.Str(dump_only=True)
     upload_date = fields.DateTime(dump_only=True)
 
 
 class SurveyStatusSchema(Schema):
     completed = fields.Bool(dump_only=True)
     last_completed = fields.DateTime(dump_only=True, allow_none=True)
-
+    survey = fields.Dict(allow_none=True)
 
 class FullClientDashboardSchema(Schema):
     client_info = fields.Nested(ClientBasicInfoSchema)
-    profile = fields.Nested(ClientProfileSchema, allow_none=True)
+    profile = fields.Nested("ProfileSchema", allow_none=True)
     progress_summary = fields.Nested(ProgressSummarySchema)
     recent_activity = fields.List(fields.Nested(RecentActivitySchema))
     goals_status = fields.List(fields.Nested(GoalStatusSchema))

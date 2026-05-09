@@ -1995,75 +1995,69 @@ def get_recent_activity(client_user_id, days=7):
     activities.sort(key=lambda x: x['date'], reverse=True)
     return activities[:10]  # Return last 10 activities
 
+def normalize_status(status):
+    if hasattr(status, "value"):
+        return status.value
+    return status
+
 def get_goals_status(client_user_id):
     """Get current goals status for client"""
     try:
         goals = Goals.query.filter_by(for_user_id=client_user_id).order_by(Goals.created_at.desc()).all()
-    except Exception as e:
-        # Handle enum value errors by using raw SQL to skip invalid records
+        
+        goals_status = []
+
+        for goal in goals:
+            status = normalize_status(goal.status)
+
+            progress_percentage = 100 if status == "completed" else 0
+
+            goals_status.append({
+                "goal_id": goal.goal_id,
+                "description": goal.description,
+                "status": status,
+                "progress_percentage": progress_percentage,
+                "created_at": goal.created_at,
+                "target_date": datetime.combine(goal.end_date, datetime.min.time()) if goal.end_date else None,
+            })
+
+        return goals_status
+    
+    except Exception:
         from sqlalchemy import text
+
         stmt = text("""
             SELECT goal_id, description, status, created_at, end_date
             FROM goals
             WHERE for_user_id = :user_id
-            AND goal_type IN ('weight', 'strength', 'performance', 'nutrition', 'custom')
             ORDER BY created_at DESC
         """)
+
         results = db.session.execute(stmt, {"user_id": client_user_id}).fetchall()
-        
+
         goals_status = []
+
         for row in results:
-            progress_percentage = 0
-            if row.status == 'completed':
-                progress_percentage = 100
-            
+            status = row.status
+
             goals_status.append({
-                'goal_id': row.goal_id,
-                'description': row.description,
-                'status': row.status,
-                'progress_percentage': progress_percentage,
-                'created_at': row.created_at,
-                'target_date': datetime.combine(row.end_date, datetime.min.time()) if row.end_date else None,
+                "goal_id": row.goal_id,
+                "description": row.description,
+                "status": status,
+                "progress_percentage": 100 if status == "completed" else 0,
+                "created_at": row.created_at,
+                "target_date": datetime.combine(row.end_date, datetime.min.time()) if row.end_date else None,
             })
-        
+
         return goals_status
+
     
-    goals_status = []
-    for goal in goals:
-        progress_percentage = 0  # Simple placeholder - could be calculated based on goal type
-        if goal.status == 'completed':
-            progress_percentage = 100
-        
-        goals_status.append({
-            'goal_id': goal.goal_id,
-            'description': goal.description,
-            'status': goal.status,
-            'progress_percentage': progress_percentage,
-            'created_at': goal.created_at,
-            'target_date': datetime.combine(goal.end_date, datetime.min.time()),
-#             'target_date': datetime.combine(goal.end_date, datetime.min.time()) if goal.end_date else None,
-        })
-    
-    return goals_status
+
 
 def get_client_profile(client_user_id):
     """Get client profile data"""
     from models import ClientProfiles
-    profile = ClientProfiles.query.filter_by(client_id=client_user_id).first()
-    if not profile:
-        return None
-
-    return {
-        'client_id': profile.client_id,
-        'bio': profile.bio,
-        'date_of_birth': profile.date_of_birth,
-        'height': profile.height,
-        'weight': profile.weight,
-        'gender': profile.gender,
-        'profile_photo': profile.profile_photo,
-        'timezone': profile.timezone,
-        'created_at': profile.created_at
-    }
+    return ClientProfiles.query.filter_by(client_id=client_user_id).first()
 
 def get_client_workout_assignments(client_user_id):
     """Get client's workout assignments"""
@@ -2192,6 +2186,7 @@ def get_client_coaches(client_user_id):
         coach_user = Users.query.get(coach.user_id)
         if not coach_user:
             continue
+        
             
         result.append({
             'coach_profile_id': coach.coach_profile_id,
@@ -2232,7 +2227,18 @@ def get_client_survey_status(client_user_id):
     
     return {
         'completed': survey is not None,
-        'last_completed': survey.created_at if survey else None
+        'last_completed': survey.created_at if survey else None,
+        "survey": {
+            "date": survey.date,
+            "daily_goal": survey.daily_goal,
+            "energy_level": survey.energy_level,
+            "target_focus": survey.target_focus,
+            "water_oz": float(survey.water_oz) if survey.water_oz else 0,
+            "mood_score": survey.mood_score,
+            "weight_lbs": float(survey.weight_lbs) if survey.weight_lbs else None,
+            "sleep_hours": float(survey.sleep_hours) if survey.sleep_hours else None,
+            "notes": survey.notes,
+        }
     }
 
 # Dashboard Endpoints

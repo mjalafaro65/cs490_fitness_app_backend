@@ -18,7 +18,6 @@ class DailySurveySchema(Schema):
     mood_score = fields.Int(required=False, allow_none=True)
 
 class ProfileSchema(Schema):
-    client_profile_id = fields.Int(dump_only=True)
     client_id = fields.Int(dump_only=True)
     
     date_of_birth = fields.Date(format='%Y-%m-%d')
