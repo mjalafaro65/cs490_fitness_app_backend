@@ -714,7 +714,7 @@ class CoachAvailabilityView(MethodView):
         return availability
     
 
-    @jwt_required()
+    @jwt_required(optional=True)
     @coach_blp.response(200, CoachAvailabilitySchema(many=True))
     def get(self, ):
         curr_auth_id =get_jwt_identity()
