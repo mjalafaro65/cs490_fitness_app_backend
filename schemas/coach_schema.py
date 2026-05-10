@@ -65,6 +65,8 @@ class CoachProfileQuerySchema(Schema):
 class CoachDocumentSchema(Schema):
     document_type = fields.Str(required=True, validate=validate.OneOf(['Certification', 'Identification', 'License ', 'Other']))
     document_url = fields.Str(required=True)
+    notes=fields.Str(required=False, allow_none=True)
+
     
     # These are for the Database/Response only
     document_id = fields.Int(dump_only=True)
