@@ -68,8 +68,8 @@ class PlanDayUpdateSchema(Schema):
 
 class DayExerciseCreateSchema(Schema):
     exercise_id = fields.Int(required=True)
-    sets = fields.Int(required=True, validate=validate.Range(min=1))
-    reps = fields.Int(required=True, validate=validate.Range(min=1))
+    sets = fields.Int(required=False)
+    reps = fields.Int(required=False)
     weight = fields.Decimal(required=False, allow_none=True, places=2)
     duration_minutes = fields.Int(required=False, allow_none=True)
     notes = fields.Str(required=False, allow_none=True)
@@ -83,8 +83,8 @@ class DayExerciseCreateSchema(Schema):
 
 
 class DayExerciseUpdateSchema(Schema):
-    sets = fields.Int(required=False, validate=validate.Range(min=1))
-    reps = fields.Int(required=False, validate=validate.Range(min=1))
+    sets = fields.Int(required=False)
+    reps = fields.Int(required=False)
     weight = fields.Decimal(required=False, allow_none=True, places=2)
     duration_minutes = fields.Int(required=False, allow_none=True)
     notes = fields.Str(required=False, allow_none=True)

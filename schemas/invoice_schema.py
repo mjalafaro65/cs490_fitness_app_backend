@@ -43,7 +43,7 @@ class UpdateInvoiceStatusSchema(Schema):
 
 class PayInvoiceSchema(Schema):
     invoice_id = fields.Int(required=True)
-    last4 = fields.Str(required=False, allow_none=True, load_default=None)
+    # last4 = fields.Str(required=False, allow_none=True, load_default=None)
 
 class ResolveDisputeSchema(Schema):
     dispute_id = fields.Int(required=True)
