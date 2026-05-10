@@ -30,7 +30,8 @@ class CreateMealLogSchema(Schema):
     meal_id = fields.Int(required=False, allow_none=True)
     custom_meal_name = fields.Str(required=False, allow_none=True)
 
-    calories = fields.Int(required=False)
+
+    calories = fields.Int(required=False, allow_none=True)
 
     logged_at = fields.DateTime(dump_only=True)
 

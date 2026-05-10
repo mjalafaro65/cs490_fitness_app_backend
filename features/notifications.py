@@ -1,4 +1,5 @@
 from flask.views import MethodView
+from datetime import datetime, timedelta, timezone
 from flask_smorest import Blueprint,abort
 from models import Users, Notifications, UserRoles
 from db import db
@@ -24,6 +25,8 @@ class NotificationsView(MethodView):
         if not user:
             abort(401, description="User not found.")
         role_ids = [r.role_id for r in user.roles]
+        
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
                 
         stmt = (
@@ -32,9 +35,10 @@ class NotificationsView(MethodView):
                 or_(
                     Notifications.user_id == user.user_id,
                     Notifications.role_id.in_(role_ids)
-                )
+                ),
+                Notifications.created_at >= seven_days_ago
             )
-            .order_by(Notifications.is_read.asc(), Notifications.created_at.desc())
+            .order_by( Notifications.created_at.desc())
         )
 
         notifications = db.session.execute(stmt).scalars().all()

@@ -2013,6 +2013,7 @@ class AssignmentSchedule(MethodView):
                 plan_id=assignment.plan_id
             ).first()
             if not day:
+                print(f"plan_day_id {pid} does not belong to this assignment")
                 abort(400, description=f"plan_day_id {pid} does not belong to this assignment.")
 
             cw = CalendarWorkouts(

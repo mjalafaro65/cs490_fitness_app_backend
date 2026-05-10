@@ -123,7 +123,7 @@ class UserSetup(MethodView):
             client_pf=ClientProfiles(client_id=user.user_id, **data)
 
             db.session.add(client_pf)
-            db.session.commit()
+            
             
             create_notification(
                 user_id=user.user_id,
@@ -131,7 +131,11 @@ class UserSetup(MethodView):
                 title="Welcome to FitNet",
                 body=f"New profile has been set up {user.user_id}"
             )
+            
+            db.session.commit()
             return {"msg": "Setup successful", "auth_id": user.user_id}, 201 
+        
+            
     
         except Exception as e:
             db.session.rollback()

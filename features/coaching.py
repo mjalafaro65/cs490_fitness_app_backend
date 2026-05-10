@@ -1421,6 +1421,7 @@ class CoachActiveRosterView(MethodView):
                 PaymentPlans.payment_plan_id,
                 PaymentPlans.name, 
                 PaymentPlans.billing_type,
+                PaymentPlans.amount,
                 
             )
             .join(Users, CoachClientRelationships.client_user_id == Users.user_id)
@@ -1443,7 +1444,8 @@ class CoachActiveRosterView(MethodView):
                     "plan": {
                         "plan_id": row.payment_plan_id,
                         "name": row.name,
-                        "billing_type": row.billing_type.value
+                        "billing_type": row.billing_type.value,
+                        "amount": row.amount,
                     },
                     "status": row.status.value
                 
@@ -2248,6 +2250,13 @@ def get_client_survey_status(client_user_id):
         user_id=client_user_id,
         date=today
     ).first()
+    
+    if not survey:
+        return {
+            "completed": False,
+            "last_completed": None,
+            "survey": None
+        }
     
     return {
         'completed': survey is not None,
