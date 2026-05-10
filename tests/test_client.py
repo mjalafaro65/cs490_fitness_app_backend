@@ -5,6 +5,7 @@ from models.invoices import StatusEnumList
 from models.coach_client_relationships import status_enum
 from datetime import datetime
 from db import db
+from models.coach_profiles import ApprovalStatusEnum
 
 def test_client_profile_unauthenticated(client):
     response = client.get("/client/profile")
@@ -28,9 +29,18 @@ def test_rehire_coach_logic(client, app, client_headers, coach_headers):
 
         c_profile = CoachProfiles.query.filter_by(user_id=coach_id).first()
         if not c_profile:
-            c_profile = CoachProfiles(user_id=coach_id, specialty_id=spec.specialty_id, status="approved", years_experience=5)
+            c_profile = CoachProfiles(
+                user_id=coach_id, 
+                specialty_id=spec.specialty_id, 
+                status=ApprovalStatusEnum.approved,
+                years_experience=5
+            )
             db.session.add(c_profile)
             db.session.flush()
+        else:
+            c_profile.status = ApprovalStatusEnum.approved
+
+        db.session.flush()
 
         plan = PaymentPlans(
             coach_profile_id=c_profile.coach_profile_id,
@@ -40,6 +50,7 @@ def test_rehire_coach_logic(client, app, client_headers, coach_headers):
         )
         db.session.add(plan)
         db.session.flush()
+        plan_id = plan.payment_plan_id
         
         old_relationship = CoachClientRelationships(
             client_user_id=client_id,
@@ -48,18 +59,25 @@ def test_rehire_coach_logic(client, app, client_headers, coach_headers):
             status=status_enum.terminated
         )
         db.session.add(old_relationship)
+        db.session.flush()
+        rel_id = old_relationship.relationship_id
         db.session.commit()
         
-        rel_id = old_relationship.relationship_id
 
     response = client.post(
         "/client/rehire-coach", 
         headers=client_headers, 
-        json={"relationship_id": rel_id}
+        json={
+            "relationship_id": rel_id,
+            "payment_plan_id": plan_id}
     )
 
+    print("THE REL_ID IS:", rel_id)
+    print("THE ERROR IS:", response.json)
+
     assert response.status_code == 200
-    assert response.json["status"] == "pending"
+    assert "request_id" in response.json
+    assert response.json["message"] == "Rehire request sent. Waiting for coach approval."
 
 def test_pay_invoice_logic(client, app, client_headers, coach_headers):
     from flask_jwt_extended import decode_token
