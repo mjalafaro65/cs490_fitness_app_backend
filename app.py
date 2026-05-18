@@ -43,10 +43,10 @@ class Config:
                 "ssl_ca": ca_path,
                 "ssl_verify_cert": False
             },
-            "pool_size": 5,
-            "pool_recycle": 280,
-            "pool_pre_ping": True,
-            "pool_timeout": 30
+            # "pool_size": 1,
+            # "pool_recycle": 280,
+            # "pool_pre_ping": True,
+            # "pool_timeout": 30
         }
        
     ############ THIS SECTION HAS THE POTENTIAL TO DELETE DB TABLES EDIT WITH CARE ############
